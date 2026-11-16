@@ -1,0 +1,90 @@
+name: Compilar instaladores
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: APK de Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compilar APK
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+      - run: cp android/app/build/outputs/apk/release/app-release.apk Paperbook-Android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: Paperbook-Android.apk
+          if-no-files-found: error
+
+  desktop:
+    name: Escritorio (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, name: Linux }
+          - { os: windows-latest, name: Windows }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependencias
+        working-directory: desktop
+        run: npm ci
+      - name: Empaquetar
+        working-directory: desktop
+        run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publicar descargas
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: descargas
+          name: Paperbook – instaladores
+          target_commitish: ${{ github.sha }}
+          make_latest: 'true'
+          body: |
+            Instaladores generados automáticamente a partir del último cambio.
+
+            - **Android**: `Paperbook-Android.apk`
+            - **Windows**: `Paperbook-Setup-Windows.exe` (instalador) o `Paperbook-Portable-Windows.exe` (sin instalar)
+            - **Linux**: `Paperbook-linux-x86_64.AppImage` o `Paperbook-linux-amd64.deb`
+          files: out/*

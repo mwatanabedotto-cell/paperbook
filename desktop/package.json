@@ -1,0 +1,35 @@
+{
+  "name": "paperbook",
+  "version": "1.0.0",
+  "description": "Visor de documentos con anotaciones a mano y sincronización con Google Drive",
+  "homepage": "https://github.com/mwatanabedotto-cell/paperbook",
+  "author": { "name": "Paperbook", "email": "paperbook@users.noreply.github.com" },
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prep": "node prep.js",
+    "start": "npm run prep && electron .",
+    "dist": "npm run prep && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.paperbook.desktop",
+    "productName": "Paperbook",
+    "files": ["main.js", "preload.js", "www/**/*"],
+    "directories": { "output": "dist" },
+    "fileAssociations": [{ "ext": "pdf", "name": "Documento PDF", "role": "Viewer" }],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "artifactName": "Paperbook-linux-${arch}.${ext}"
+    },
+    "win": { "target": ["nsis", "portable"], "icon": "build/icon.png" },
+    "nsis": { "artifactName": "Paperbook-Setup-Windows.${ext}", "oneClick": true, "perMachine": false },
+    "portable": { "artifactName": "Paperbook-Portable-Windows.${ext}" }
+  }
+}

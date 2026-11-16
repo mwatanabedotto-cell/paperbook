@@ -17,6 +17,9 @@ const ls = {
 
 class AuthError extends Error {}
 
+/** Presente solo en la app de escritorio: inicio de sesión por el navegador del sistema. */
+const native = window.paperbookNative;
+
 export const drive = {
   state: 'off', // off | idle | syncing | error | auth
   message: '',
@@ -25,6 +28,8 @@ export const drive = {
 
   get clientId() { return ls.get('clientId') || ''; },
   set clientId(v) { ls.set('clientId', v || null); },
+  get clientSecret() { return ls.get('clientSecret') || ''; },
+  set clientSecret(v) { ls.set('clientSecret', v || null); },
   get connected() { return !!ls.get('connected') && !!this.clientId; },
 
   setState(state, message = '') {
@@ -56,7 +61,19 @@ export const drive = {
     return null;
   },
 
-  async requestToken() {
+  async requestToken(interactive = false) {
+    if (native) {
+      const cfg = { clientId: this.clientId, clientSecret: this.clientSecret };
+      let r;
+      try {
+        r = interactive ? await native.oauth.login(cfg) : await native.oauth.token(cfg);
+      } catch (e) {
+        throw new AuthError(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+      }
+      if (!r?.access_token) throw new AuthError('Vuelve a conectar con Google Drive.');
+      ls.set('token', JSON.stringify({ t: r.access_token, exp: Date.now() + r.expires_in * 1000 }));
+      return r.access_token;
+    }
     await this.loadGis();
     return new Promise((res, rej) => {
       const client = google.accounts.oauth2.initTokenClient({
@@ -76,13 +93,14 @@ export const drive = {
   /** Debe llamarse desde un clic del usuario (abre la ventana de Google). */
   async connect() {
     if (!this.clientId) throw new Error('Falta el ID de cliente de Google.');
-    await this.requestToken();
+    await this.requestToken(true);
     ls.set('connected', '1');
     this.setState('idle');
     return this.sync();
   },
 
   disconnect() {
+    native?.oauth.logout();
     const t = this.token();
     if (t && window.google?.accounts) google.accounts.oauth2.revoke(t, () => {});
     for (const k of ['token', 'connected', 'folderId']) ls.set(k, null);

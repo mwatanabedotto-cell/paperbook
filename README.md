@@ -37,6 +37,41 @@ Android, aparece en «Abrir con» para los PDF y en «Compartir» desde el naveg
 
 Para probarla en local: `python3 -m http.server 8000` y abre `http://localhost:8000`.
 
+## Instaladores (Android, Windows, Linux)
+
+Cada cambio en el repositorio compila los instaladores y los publica en
+<https://github.com/mwatanabedotto-cell/paperbook/releases/tag/descargas>:
+
+| Sistema | Archivo | Notas |
+| --- | --- | --- |
+| Android | `Paperbook-Android.apk` | Al abrirlo, Android pedirá permitir «instalar apps desconocidas». |
+| Windows | `Paperbook-Setup-Windows.exe` | Instalador. No está firmado: en el aviso de SmartScreen pulsa «Más información → Ejecutar de todas formas». También hay `Paperbook-Portable-Windows.exe`, que no se instala. |
+| Linux | `Paperbook-linux-x86_64.AppImage` | `chmod +x` y doble clic. En Debian/Ubuntu también `Paperbook-linux-amd64.deb`. |
+
+**Windows y Linux** llevan la app completa dentro: funcionan sin publicar nada y sin conexión.
+Además guardan páginas web directamente, sin proxy.
+
+**Android** es una «Trusted Web Activity»: abre la versión publicada en GitHub Pages a pantalla
+completa usando Chrome, así que **primero hay que publicarla** (sección anterior). Tras la primera
+apertura funciona sin conexión. Mientras el dominio no esté verificado, Chrome muestra una barra
+fina con la dirección arriba; para quitarla, crea un repositorio público llamado
+`mwatanabedotto-cell.github.io` con un archivo vacío `.nojekyll` y este `.well-known/assetlinks.json`:
+
+```json
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.paperbook.twa",
+    "sha256_cert_fingerprints": ["1E:55:C1:97:F1:9F:67:7A:66:30:97:F5:51:4D:66:E6:68:F3:4E:38:69:5D:5B:FA:6C:07:58:92:F8:48:18:8E"]
+  }
+}]
+```
+
+El APK se firma con la clave `android/app/paperbook.keystore`, incluida en el repositorio para que
+las versiones nuevas se instalen encima de las anteriores. Vale para uso personal; para publicar en
+una tienda, sustitúyela por una clave privada.
+
 ## Sincronizar con Google Drive
 
 La app habla directamente con tu Drive, sin servidor intermedio. Para eso Google exige un
@@ -52,6 +87,12 @@ La app habla directamente con tu Drive, sin servidor intermedio. Para eso Google
 5. Copia el **ID de cliente** (termina en `.apps.googleusercontent.com`).
 6. En Paperbook pulsa **Conectar Drive**, pega el ID y pulsa **Conectar con Google**.
    Repite este último paso en cada dispositivo, con el mismo ID.
+
+**En la app de escritorio (Windows/Linux)** el inicio de sesión se hace en tu navegador y necesita
+otro tipo de credencial del mismo proyecto: **Credenciales → Crear credenciales → ID de cliente de
+OAuth → App de escritorio**. Copia el **ID de cliente** y el **secreto del cliente** y pégalos en
+«Conectar Drive». Solo se inicia sesión una vez. Al estar en el mismo proyecto, ve los mismos
+archivos que la tablet.
 
 La app pide el permiso mínimo (`drive.file`): solo puede ver los archivos que ella misma crea, no el
 resto de tu Drive. Por eso los PDF que ya tienes en Drive hay que añadirlos desde la app
@@ -85,4 +126,7 @@ js/web.js                   captura de páginas web
 js/search.js                índice de texto para la búsqueda
 sw.js                       funcionamiento sin conexión
 vendor/pdfjs/               PDF.js 4.10 (Mozilla, licencia Apache 2.0)
+desktop/                    app de escritorio (Electron) para Windows y Linux
+android/                    proyecto del APK (Trusted Web Activity)
+.github/workflows/build.yml compila y publica los instaladores
 ```

@@ -1,0 +1,50 @@
+// Paperbook para Android: Trusted Web Activity que abre la app web publicada
+// a pantalla completa usando Chrome (así el inicio de sesión de Google funciona igual).
+plugins {
+    id 'com.android.application'
+}
+
+def siteHost = 'mwatanabedotto-cell.github.io'
+def sitePath = '/paperbook/'
+
+android {
+    namespace 'app.paperbook.twa'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'app.paperbook.twa'
+        minSdk 23
+        targetSdk 34
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName '1.0.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+        manifestPlaceholders = [siteHost: siteHost, sitePath: sitePath, siteUrl: "https://${siteHost}${sitePath}"]
+    }
+
+    signingConfigs {
+        release {
+            // Clave incluida en el repositorio para que todas las compilaciones se puedan
+            // actualizar entre sí. Sustitúyela por una privada si publicas en una tienda.
+            storeFile file('paperbook.keystore')
+            storeType 'pkcs12'
+            storePassword 'paperbook'
+            keyAlias 'paperbook'
+            keyPassword 'paperbook'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

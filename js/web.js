@@ -7,6 +7,13 @@ export const getProxy = () => localStorage.getItem('pb.proxy') ?? DEFAULT_PROXY;
 export const setProxy = (v) => localStorage.setItem('pb.proxy', v);
 
 async function get(url, ms = 15000) {
+  const native = window.paperbookNative;
+  if (native?.fetch && /^https?:/i.test(url)) {
+    // app de escritorio: descarga directa, sin proxy
+    const r = await native.fetch(url);
+    if (!r.ok) throw new Error(`No se pudo descargar (${r.status}).`);
+    return new Response(r.body, { status: 200, headers: r.type ? { 'content-type': r.type } : {} });
+  }
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(ms), credentials: 'omit' });
     if (r.ok) return r;

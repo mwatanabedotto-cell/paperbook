@@ -246,8 +246,9 @@ function webDialog(prefill = '') {
   return dialog('Guardar página web', (dlg, close) => {
     const input = el('input', { type: 'url', placeholder: 'https://…', value: prefill, required: true, inputmode: 'url' });
     const status = el('p', { class: 'hint', 'aria-live': 'polite' },
-      'Se guarda una copia para leerla y anotarla sin conexión. Si el sitio bloquea la descarga directa, se usa el proxy configurado en Ajustes' +
-      (getProxy() ? ` (${new URL(getProxy()).hostname}).` : ' (ninguno).') +
+      'Se guarda una copia para leerla y anotarla sin conexión.' + (window.paperbookNative ? '' :
+        ' Si el sitio bloquea la descarga directa, se usa el proxy configurado en Ajustes' +
+        (getProxy() ? ` (${new URL(getProxy()).hostname}).` : ' (ninguno).')) +
       ' Las páginas que requieren iniciar sesión no se pueden capturar: guárdalas como PDF desde el navegador y súbelas.');
     const go = el('button', { type: 'submit', class: 'btn primary' }, 'Guardar');
     dlg.append(el('form', {
@@ -286,6 +287,8 @@ function driveDialog() {
   return dialog('Google Drive', (dlg, close) => {
     const id = el('input', { type: 'text', value: drive.clientId, placeholder: 'xxxxxxxx.apps.googleusercontent.com', autocomplete: 'off', spellcheck: 'false' });
     const proxy = el('input', { type: 'url', value: getProxy(), placeholder: 'vacío = sin proxy' });
+    const native = !!window.paperbookNative;
+    const secret = el('input', { type: 'password', value: drive.clientSecret, placeholder: 'GOCSPX-…', autocomplete: 'off' });
     const status = el('p', { class: 'hint' + (drive.state === 'error' || drive.state === 'auth' ? ' error' : '') },
       drive.connected
         ? (drive.message || (drive.lastSync ? 'Conectado. Última sincronización: ' + new Date(drive.lastSync).toLocaleString('es') : 'Conectado.'))
@@ -304,21 +307,24 @@ function driveDialog() {
     };
     dlg.append(
       status,
-      el('label', {}, 'ID de cliente OAuth de Google',
+      el('label', {}, native ? 'ID de cliente OAuth (tipo «App de escritorio»)' : 'ID de cliente OAuth de Google',
         id),
-      el('p', { class: 'hint' }, 'Solo se configura una vez. ',
+      native ? el('label', {}, 'Secreto del cliente', secret) : null,
+      el('p', { class: 'hint' }, native ? 'Se abrirá tu navegador para iniciar sesión; solo se hace una vez. ' : 'Solo se configura una vez. ',
         el('a', { href: 'https://github.com/mwatanabedotto-cell/paperbook#sincronizar-con-google-drive', target: '_blank', rel: 'noopener' }, 'Cómo obtenerlo (5 minutos)')),
       el('div', { class: 'row' },
         el('button', {
           class: 'btn primary', onclick: () => {
+            const changed = drive.clientId !== id.value.trim() || (native && drive.clientSecret !== secret.value.trim());
             drive.clientId = id.value.trim();
-            run(() => drive.connect());
+            if (native) drive.clientSecret = secret.value.trim();
+            run(() => (drive.connected && !changed && drive.state !== 'auth' ? drive.sync() : drive.connect()));
           },
         }, drive.connected ? 'Sincronizar ahora' : 'Conectar con Google'),
         drive.connected ? el('button', { class: 'btn', onclick: () => { drive.disconnect(); close(null); toast('Drive desconectado. Tus documentos siguen en este dispositivo.'); } }, 'Desconectar') : null),
-      el('hr'),
-      el('label', {}, 'Proxy para guardar páginas web', proxy),
-      el('p', { class: 'hint' }, `Recibe la dirección de las páginas que guardas. Predeterminado: ${DEFAULT_PROXY}`),
+      native ? null : el('hr'),
+      native ? null : el('label', {}, 'Proxy para guardar páginas web', proxy),
+      native ? null : el('p', { class: 'hint' }, `Recibe la dirección de las páginas que guardas. Predeterminado: ${DEFAULT_PROXY}`),
       el('div', { class: 'row end' },
         el('button', { class: 'btn', onclick: () => { setProxy(proxy.value.trim()); close(null); } }, 'Cerrar')));
   });
@@ -384,6 +390,20 @@ async function main() {
   setInterval(() => drive.schedule(0), 5 * 60_000);
 
   setupInstall();
+  // app de escritorio: archivos abiertos con «Abrir con Paperbook»
+  const nat = window.paperbookNative;
+  if (nat?.takeOpenFiles) {
+    const take = async () => {
+      const fs = await nat.takeOpenFiles();
+      if (!fs.length) return;
+      const before = new Set(store.docs.keys());
+      await addFiles(fs.map((f) => new File([f.data], f.name, { type: f.type })));
+      const added = [...store.docs.keys()].filter((id) => !before.has(id));
+      if (added.length === 1) location.hash = '#/d/' + added[0];
+    };
+    nat.onOpenFiles(take);
+    take();
+  }
   // "Abrir con Paperbook" desde el explorador de archivos (app instalada)
   window.launchQueue?.setConsumer(async (params) => {
     if (!params.files?.length) return;
