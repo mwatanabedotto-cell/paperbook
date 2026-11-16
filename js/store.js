@@ -4,12 +4,12 @@ let dbp;
 
 function open() {
   return (dbp ??= new Promise((res, rej) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = indexedDB.open(DB_NAME, 2);
     r.onupgradeneeded = () => {
       const d = r.result;
-      d.createObjectStore('docs', { keyPath: 'id' });
-      d.createObjectStore('blobs');
-      d.createObjectStore('ann');
+      const has = (n) => d.objectStoreNames.contains(n);
+      if (!has('docs')) d.createObjectStore('docs', { keyPath: 'id' });
+      for (const n of ['blobs', 'ann', 'text']) if (!has(n)) d.createObjectStore(n);
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -35,6 +35,21 @@ const idb = {
 
 export const newId = () =>
   Date.now().toString(36).padStart(9, '0') + Math.random().toString(36).slice(2, 8);
+
+/** Texto sin acentos ni mayúsculas, para comparar ("Apéndice" = "apendice"). */
+export const foldText = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** Igual que foldText, pero conserva la correspondencia con el texto original. */
+export function fold(str) {
+  const map = [];
+  let t = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    const c = code < 128 ? (code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : str[i]) : foldText(str[i]);
+    for (let j = 0; j < c.length; j++) { t += c[j]; map.push(i); }
+  }
+  return { t, map };
+}
 
 export const emptyAnn = () => ({ v: 1, strokes: {}, removed: {} });
 
@@ -86,7 +101,7 @@ export const store = {
   async purgeDoc(id) {
     this.docs.delete(id);
     openAnn.delete(id);
-    await Promise.all([idb.del('docs', id), idb.del('blobs', id), idb.del('ann', id)]);
+    await Promise.all(['docs', 'blobs', 'ann', 'text'].map((s) => idb.del(s, id)));
   },
 
   getBlob: (id) => idb.get('blobs', id),
@@ -109,4 +124,8 @@ export const store = {
     if (replaced) this.emit('ann', { id, ann });
   },
   delAnn: (id) => idb.del('ann', id),
+
+  getText: (id) => idb.get('text', id),
+  putText: (id, pages) => idb.put('text', pages, id),
+  delText: (id) => idb.del('text', id),
 };

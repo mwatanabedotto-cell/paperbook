@@ -7,6 +7,9 @@ sin servidor propio y sin paso de compilación.
 ## Qué hace
 
 - **Biblioteca**: PDF, imágenes, páginas web guardadas y lienzos en blanco. Búsqueda, filtros por tipo y carpetas.
+- **Búsqueda**: el buscador de la biblioteca encuentra palabras dentro de los PDF y páginas web (sin
+  distinguir acentos ni mayúsculas) y abre el documento en la primera coincidencia. Dentro del visor,
+  la lupa o Ctrl+F resalta y recorre los resultados. Los PDF escaneados (solo imagen) no tienen texto que buscar.
 - **Lienzo sobre cualquier documento**: bolígrafo (sensible a la presión del lápiz), resaltador, borrador,
   línea, flecha, rectángulo, elipse y texto. Colores, grosor, deshacer/rehacer y zoom.
 - **Lienzos en blanco**: papel liso, rayado, cuadriculado o de puntos; páginas ilimitadas.
@@ -75,6 +78,7 @@ js/ink.js                   motor de tinta (dibujo y borrado de trazos)
 js/store.js                 almacenamiento local y fusión de anotaciones
 js/drive.js                 sincronización con Google Drive
 js/web.js                   captura de páginas web
+js/search.js                índice de texto para la búsqueda
 sw.js                       funcionamiento sin conexión
 vendor/pdfjs/               PDF.js 4.10 (Mozilla, licencia Apache 2.0)
 ```

@@ -1,6 +1,6 @@
 // Visor de documentos con capa de tinta (PDF, imagen, página web guardada y lienzo en blanco).
 import * as pdfjs from '../vendor/pdfjs/pdf.min.mjs';
-import { store, newId } from './store.js';
+import { store, newId, fold, foldText } from './store.js';
 import { drawStroke, hit, bounds } from './ink.js';
 import { icon, el, toast, menu, askText, askConfirm } from './ui.js';
 
@@ -56,7 +56,12 @@ const loadPrefs = () => {
 };
 
 export class Viewer {
-  constructor(root, doc, onClose) {
+  constructor(root, doc, onClose, opts = {}) {
+    this.opts = opts;
+    this.matches = [];
+    this.mi = -1;
+    this.findTok = 0;
+    this.textCache = new Map();
     this.root = root;
     this.doc = doc;
     this.onClose = onClose;
@@ -94,6 +99,7 @@ export class Viewer {
     const bar = el('header', { class: 'vbar' },
       b('back', 'Volver a la biblioteca', () => this.close()),
       this.$title, this.$page,
+      b('search', 'Buscar en el documento (Ctrl+F)', () => this.toggleFind(this.$find.hidden)),
       b('minus', 'Alejar', () => this.setZoom(this.zoom / 1.2)),
       this.$zoom,
       b('plus', 'Acercar', () => this.setZoom(this.zoom * 1.2)),
@@ -124,10 +130,26 @@ export class Viewer {
     });
     this.$tools.append(this.$custom, el('span', { class: 'sep' }), this.$width);
 
+    this.$q = el('input', {
+      type: 'search', placeholder: 'Buscar en el documento…', 'aria-label': 'Buscar en el documento', enterkeyhint: 'search',
+      oninput: () => { clearTimeout(this.ft); this.ft = setTimeout(() => this.runFind(this.$q.value), 250); },
+      onkeydown: (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); this.stepFind(e.shiftKey ? -1 : 1); }
+        if (e.key === 'Escape') this.toggleFind(false);
+      },
+    });
+    this.$count = el('span', { class: 'fcount', 'aria-live': 'polite' }, '');
+    this.$find = el('div', { class: 'findbar', hidden: true, role: 'search' },
+      el('span', { class: 'ficon', html: icon('search') }), this.$q, this.$count,
+      b('up', 'Resultado anterior', () => this.stepFind(-1)),
+      b('down', 'Resultado siguiente', () => this.stepFind(1)),
+      b('close', 'Cerrar búsqueda', () => this.toggleFind(false)));
+
     this.$sheet = el('div', { class: 'sheet ' + doc.type });
     this.$stage = el('div', { class: 'stage' }, this.$sheet);
     this.$scroll = el('div', { class: 'scroller' }, this.$stage);
-    root.append(bar, this.$tools, this.$scroll);
+    root.append(bar, this.$find, this.$tools, this.$scroll);
 
     this.io = new IntersectionObserver((ents) => {
       for (const e of ents) {
@@ -171,6 +193,7 @@ export class Viewer {
       this.$scroll.scrollTop = pe.offsetTop + (lp.f || 0) * pe.offsetHeight - 8;
     }
     this.onScroll();
+    if (this.opts.q) this.toggleFind(true, this.opts.q);
     return this;
   }
 
@@ -299,6 +322,7 @@ export class Viewer {
     if (this.doc.type === 'image') p.el.append(el('img', { class: 'bg', src: this.url, alt: '', draggable: 'false' }));
     p.ink = el('canvas', { class: 'ink' });
     p.el.append(p.ink);
+    this.drawHits(p);
     this.render(p);
   }
 
@@ -550,6 +574,167 @@ export class Viewer {
     this.redrawKey(t.p.key);
   }
 
+  // ---------- búsqueda ----------
+  toggleFind(on, q) {
+    this.$find.hidden = !on;
+    if (!on) { this.findTok++; this.setMatches([]); this.$count.textContent = ''; return; }
+    if (q != null) this.$q.value = q;
+    this.$q.focus();
+    this.$q.select();
+    if (this.$q.value) this.runFind(this.$q.value);
+  }
+
+  setMatches(list) {
+    this.matches = list;
+    this.mi = list.length ? Math.min(Math.max(this.mi, 0), list.length - 1) : -1;
+    this.byKey = new Map();
+    list.forEach((m, i) => {
+      if (!this.byKey.has(m.key)) this.byKey.set(m.key, []);
+      this.byKey.get(m.key).push(i);
+    });
+    for (const p of this.pages) if (p.mounted) this.drawHits(p);
+  }
+
+  /** Texto de una página PDF con la posición de cada fragmento. */
+  async pageText(i) {
+    let c = this.textCache.get(i);
+    if (c) return c;
+    const page = await this.pdf.getPage(i + 1);
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    let str = '';
+    const segs = [];
+    for (const it of tc.items) {
+      if (it.str) {
+        const tx = pdfjs.Util.transform(vp.transform, it.transform);
+        const fh = Math.hypot(tx[2], tx[3]) || it.height || 10;
+        segs.push({ s: str.length, n: it.str.length, x: tx[4] / vp.width, y: (tx[5] - fh * 0.85) / vp.width, w: it.width / vp.width, h: (fh * 1.1) / vp.width });
+        str += it.str;
+      }
+      if (it.hasEOL) str += ' ';
+    }
+    c = { ...fold(str), segs };
+    this.textCache.set(i, c);
+    return c;
+  }
+
+  noteMatches(key, nq) {
+    const out = [];
+    for (const s of this.ann.strokes[key] || []) {
+      if (s.t !== 'text' || !foldText(s.text || '').includes(nq)) continue;
+      const b = bounds(s);
+      out.push({ key, y: b[1], rects: [{ x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] }] });
+    }
+    return out;
+  }
+
+  async runFind(q) {
+    const tok = ++this.findTok;
+    const nq = foldText(q).trim();
+    this.mi = -1;
+    if (nq.length < 2) { this.setMatches([]); this.$count.textContent = ''; return; }
+    const all = [];
+    const occurrences = (t, fn) => {
+      for (let k = t.indexOf(nq); k >= 0; k = t.indexOf(nq, k + nq.length)) fn(k);
+    };
+    const publish = (done) => {
+      const first = this.mi < 0 && all.length;
+      this.setMatches(all.slice());
+      if (first) this.goMatch(0); else this.showCount(done);
+      if (done && !all.length) this.$count.textContent = 'Sin resultados';
+    };
+
+    if (this.doc.type === 'pdf') {
+      const n = this.pdf.numPages;
+      for (let i = 0; i < n; i++) {
+        let c;
+        try { c = await this.pageText(i); } catch { continue; }
+        if (tok !== this.findTok) return;
+        const found = this.noteMatches(i, nq);
+        occurrences(c.t, (k) => {
+          const a = c.map[k], b = c.map[k + nq.length - 1] + 1;
+          const rects = [];
+          for (const sg of c.segs) {
+            if (sg.s + sg.n <= a || sg.s >= b) continue;
+            const f0 = (Math.max(a, sg.s) - sg.s) / sg.n, f1 = (Math.min(b, sg.s + sg.n) - sg.s) / sg.n;
+            rects.push({ x: sg.x + sg.w * f0, y: sg.y, w: sg.w * (f1 - f0), h: sg.h });
+          }
+          if (rects.length) found.push({ key: i, y: rects[0].y, rects });
+        });
+        found.sort((x, y) => x.y - y.y);
+        all.push(...found);
+        if (found.length || i % 25 === 24) { publish(false); if (!all.length) this.$count.textContent = `Buscando… ${i + 1}/${n}`; }
+      }
+    } else if (this.doc.type === 'web') {
+      const d = this.frame?.contentDocument;
+      all.push(...this.noteMatches(0, nq));
+      if (d?.body) {
+        const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+        const range = d.createRange();
+        for (let node = w.nextNode(); node; node = w.nextNode()) {
+          if (/^(STYLE|SCRIPT|NOSCRIPT|TEMPLATE)$/.test(node.parentNode?.nodeName)) continue;
+          const f = fold(node.data);
+          occurrences(f.t, (k) => {
+            range.setStart(node, f.map[k]);
+            range.setEnd(node, f.map[k + nq.length - 1] + 1);
+            const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0)
+              .map((r) => ({ x: r.left / WEB_W, y: r.top / WEB_W, w: r.width / WEB_W, h: r.height / WEB_W }));
+            if (rects.length) all.push({ key: 0, y: rects[0].y, rects });
+          });
+        }
+      }
+      all.sort((x, y) => x.y - y.y);
+    } else {
+      for (const p of this.pages) all.push(...this.noteMatches(p.key, nq).sort((x, y) => x.y - y.y));
+    }
+    if (tok === this.findTok) publish(true);
+  }
+
+  showCount(done = true) {
+    const n = this.matches.length;
+    this.$count.textContent = n ? `${this.mi + 1} / ${n}${done ? '' : '…'}` : '';
+  }
+
+  stepFind(dir) {
+    const n = this.matches.length;
+    if (!n) { if (this.$q.value) this.runFind(this.$q.value); return; }
+    this.goMatch((this.mi + dir + n) % n);
+  }
+
+  goMatch(i) {
+    const m = this.matches[i];
+    if (!m) return;
+    this.mi = i;
+    const p = this.pages.find((x) => x.key === m.key && m.y >= x.offY - 1e-6 && m.y < x.offY + x.aspect) ||
+      this.pages.find((x) => x.key === m.key);
+    if (p) {
+      const s = this.$scroll;
+      s.scrollTop = p.el.offsetTop + (m.y - p.offY) * this.pw - s.clientHeight * 0.3;
+      const x = m.rects[0].x * this.pw;
+      if (x < s.scrollLeft || x > s.scrollLeft + s.clientWidth - 60) s.scrollLeft = Math.max(0, x - 60);
+    }
+    for (const q of this.pages) if (q.mounted) this.drawHits(q);
+    this.showCount();
+  }
+
+  drawHits(p) {
+    for (const h of p.el.querySelectorAll('.hit')) h.remove();
+    const idx = this.byKey?.get(p.key);
+    if (!idx || !p.ink) return;
+    const y0 = p.offY, y1 = p.offY + p.aspect;
+    for (const i of idx) {
+      for (const r of this.matches[i].rects) {
+        if (r.y + r.h < y0 || r.y > y1) continue;
+        const h = el('div', { class: 'hit' + (i === this.mi ? ' cur' : '') });
+        h.style.left = r.x * 100 + '%';
+        h.style.width = r.w * 100 + '%';
+        h.style.top = `calc(var(--pw) * ${r.y - p.offY})`;
+        h.style.height = `calc(var(--pw) * ${r.h})`;
+        p.el.insertBefore(h, p.ink);
+      }
+    }
+  }
+
   // ---------- deshacer / rehacer ----------
   apply(op) {
     for (const e of op.del) {
@@ -714,9 +899,11 @@ export class Viewer {
   }
 
   onKey(e) {
-    if (e.target.closest('input, textarea, dialog')) return;
+    const modF = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f';
+    if (e.target.closest('input, textarea, dialog') && !(modF && !e.target.closest('dialog'))) return;
     const mod = e.ctrlKey || e.metaKey;
-    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.doRedo() : this.doUndo(); }
+    if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); this.toggleFind(true); }
+    else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.doRedo() : this.doUndo(); }
     else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); this.doRedo(); }
     else if (mod && (e.key === '+' || e.key === '=')) { e.preventDefault(); this.setZoom(this.zoom * 1.2); }
     else if (mod && e.key === '-') { e.preventDefault(); this.setZoom(this.zoom / 1.2); }
@@ -729,6 +916,8 @@ export class Viewer {
     this.savePos();
     clearTimeout(this.pt);
     clearTimeout(this.rt);
+    clearTimeout(this.ft);
+    this.findTok++;
     await this.flush();
     this.ac.abort();
     this.offStore?.();

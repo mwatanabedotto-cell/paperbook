@@ -1,14 +1,16 @@
 // Paperbook: biblioteca, importación y orquestación de la sincronización.
-import { store, newId } from './store.js';
+import { store, newId, foldText } from './store.js';
 import { Viewer, makeThumb } from './viewer.js';
 import { drive } from './drive.js';
+import { indexSoon, indexPending, searchContent } from './search.js';
 import { capture, fromHtmlFile, getProxy, setProxy, DEFAULT_PROXY } from './web.js';
 import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
 
 const $lib = document.getElementById('library');
 const $viewer = document.getElementById('viewer');
 const TYPES = { pdf: ['PDF', 'file'], web: ['Web', 'globe'], image: ['Imagen', 'image'], canvas: ['Lienzo', 'canvas'] };
-const ui = { type: '', folder: '', q: '' };
+const ui = { type: '', folder: '', q: '', raw: '', hits: new Map() };
+let searchTimer, searchSeq = 0;
 let viewer = null;
 
 // ---------- biblioteca ----------
@@ -27,8 +29,19 @@ function buildLib() {
       el('h1', { class: 'brand' }, 'Paperbook'),
       el('label', { class: 'search', html: icon('search') },
         el('input', {
-          type: 'search', placeholder: 'Buscar documentos…', 'aria-label': 'Buscar documentos',
-          oninput: (e) => { ui.q = e.target.value.toLowerCase(); renderLib(); },
+          type: 'search', placeholder: 'Buscar en títulos y contenido…', 'aria-label': 'Buscar en títulos y contenido',
+          oninput: (e) => {
+            ui.raw = e.target.value.trim();
+            ui.q = foldText(ui.raw);
+            ui.hits = new Map();
+            renderLib();
+            clearTimeout(searchTimer);
+            const seq = ++searchSeq;
+            searchTimer = setTimeout(async () => {
+              const hits = await searchContent(ui.raw);
+              if (seq === searchSeq) { ui.hits = hits; renderLib(); }
+            }, 250);
+          },
         })),
       $drive,
       el('button', { class: 'btn primary', html: icon('plus') + '<span>Añadir</span>', onclick: (e) => addMenu(e.currentTarget) })),
@@ -60,7 +73,7 @@ function renderLib() {
 
   const docs = all
     .filter((d) => (!ui.type || d.type === ui.type) && (!ui.folder || d.folder === ui.folder) &&
-      (!ui.q || d.title.toLowerCase().includes(ui.q) || (d.folder || '').toLowerCase().includes(ui.q)))
+      (!ui.q || foldText(d.title).includes(ui.q) || foldText(d.folder || '').includes(ui.q) || ui.hits.has(d.id)))
     .sort((a, b) => recency(b) - recency(a));
 
   if (!docs.length) {
@@ -82,12 +95,17 @@ function card(d) {
   const thumb = d.thumb
     ? el('img', { src: d.thumb, alt: '', loading: 'lazy' })
     : el('div', { class: 'ph ' + d.type, html: icon(ic) });
+  const hit = ui.q ? ui.hits.get(d.id) : null;
+  const href = '#/d/' + d.id + (hit ? '?q=' + encodeURIComponent(ui.raw) : '');
   const c = el('article', { class: 'card' },
-    el('a', { class: 'open', href: '#/d/' + d.id, 'aria-label': 'Abrir ' + d.title },
+    el('a', { class: 'open', href, 'aria-label': 'Abrir ' + d.title },
       el('div', { class: 'thumb' }, thumb),
       el('div', { class: 'info' },
         el('h3', {}, d.title),
-        el('p', {}, [label, d.folder, fmtDate(recency(d)), d.noBlob ? 'pendiente de descarga' : null].filter(Boolean).join(' · ')))),
+        el('p', {}, [label, d.folder, fmtDate(recency(d)), d.noBlob ? 'pendiente de descarga' : null].filter(Boolean).join(' · ')),
+        hit ? el('p', { class: 'snip' },
+          el('strong', {}, `${hit.n} ${hit.n === 1 ? 'coincidencia' : 'coincidencias'}${d.type === 'pdf' ? ' · p. ' + (hit.page + 1) : ''}`),
+          ' ' + hit.snip) : null)),
     el('button', { class: 'ib kebab', title: 'Opciones', 'aria-label': 'Opciones de ' + d.title, html: icon('more'), onclick: (e) => cardMenu(e.currentTarget, d) }));
   return c;
 }
@@ -130,6 +148,7 @@ function cardMenu(anchor, d) {
         d.thumb = null;
         await store.delBlob(d.id);
         await store.delAnn(d.id);
+        await store.delText(d.id);
         await store.saveDoc(d);
       },
     },
@@ -155,6 +174,7 @@ async function createDoc(fields, blob) {
     d.thumb = await makeThumb(d.type, blob);
   }
   await store.saveDoc(d);
+  indexSoon(d);
   return d;
 }
 
@@ -276,7 +296,8 @@ function driveDialog() {
 
 // ---------- navegación ----------
 async function route() {
-  const id = /^#\/d\/(.+)$/.exec(location.hash)?.[1];
+  const [, id, qs] = /^#\/d\/([^?]+)(?:\?(.*))?$/.exec(location.hash) || [];
+  const q = new URLSearchParams(qs || '').get('q') || '';
   if (viewer && viewer.doc.id !== id) {
     const v = viewer;
     viewer = null;
@@ -287,7 +308,7 @@ async function route() {
     if (!d || d.deleted) { location.hash = ''; return; }
     $lib.hidden = true;
     $viewer.hidden = false;
-    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }));
+    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }, { q }));
     try {
       await v.init();
       document.title = d.title + ' · Paperbook';
@@ -320,6 +341,8 @@ async function main() {
   drive.init();
   addEventListener('hashchange', route);
   await route();
+
+  indexPending(); // indexa el texto de documentos añadidos antes de existir la búsqueda
 
   // sincronización automática
   if (drive.connected) drive.sync().catch(() => {});

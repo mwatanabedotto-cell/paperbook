@@ -2,6 +2,7 @@
 // Usa el permiso mínimo "drive.file": la app solo ve los archivos que ella misma crea.
 import { store, mergeAnn, emptyAnn } from './store.js';
 import { makeThumb } from './viewer.js';
+import { indexSoon } from './search.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
@@ -266,6 +267,7 @@ export const drive = {
       if (!R.meta && !L.drive?.metaId) return store.purgeDoc(id);
       await store.delBlob(id);
       await store.delAnn(id);
+      await store.delText(id);
       if (L.dirty || !R.meta) await this.pushMeta(L, null, folderId, R);
       return;
     }
@@ -280,6 +282,7 @@ export const drive = {
         L.thumb = await makeThumb(L.type, typed);
         L.drive = { ...L.drive, contentId: R.content.id };
         await store.saveDoc(L, { local: true });
+        indexSoon(L);
       } else if (!R.content && !L.noBlob) {
         const blob = await store.getBlob(id);
         if (blob) {
