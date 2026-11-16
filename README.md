@@ -29,7 +29,11 @@ Google solo permite iniciar sesión desde una dirección `https://`, así que la
 2. Elige la rama que contiene estos archivos y la carpeta `/ (root)`. Guarda.
 3. En un par de minutos estará en `https://mwatanabedotto-cell.github.io/paperbook/`.
    (En repositorios privados, Pages requiere un plan de pago de GitHub.)
-4. En la tablet o computadora, abre esa dirección y usa «Instalar aplicación» / «Añadir a pantalla de inicio».
+4. En la tablet o computadora, abre esa dirección y pulsa **Instalar app** (arriba, junto a «Conectar Drive»).
+   En iPad/iPhone: Safari → Compartir → «Añadir a pantalla de inicio».
+
+Instalada, se abre a pantalla completa con su propio icono, funciona sin conexión y, en computadora y
+Android, aparece en «Abrir con» para los PDF y en «Compartir» desde el navegador.
 
 Para probarla en local: `python3 -m http.server 8000` y abre `http://localhost:8000`.
 

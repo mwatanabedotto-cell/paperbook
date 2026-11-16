@@ -18,6 +18,36 @@ const $grid = el('div', { class: 'grid' });
 const $chips = el('div', { class: 'chips', role: 'group', 'aria-label': 'Filtrar por tipo' });
 const $folder = el('select', { class: 'folder', 'aria-label': 'Carpeta', onchange: (e) => { ui.folder = e.target.value; renderLib(); } });
 const $drive = el('button', { class: 'btn drive', onclick: () => driveDialog() });
+const $install = el('button', { class: 'btn install', hidden: true, html: icon('download') + '<span>Instalar app</span>', onclick: () => installApp() });
+let installEvent = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+async function installApp() {
+  if (installEvent) {
+    installEvent.prompt();
+    const { outcome } = await installEvent.userChoice;
+    installEvent = null;
+    if (outcome === 'accepted') $install.hidden = true;
+    return;
+  }
+  dialog('Instalar Paperbook', (d, close) => {
+    d.append(
+      el('p', {}, isIOS()
+        ? 'En iPad o iPhone, abre esta página en Safari, toca el botón Compartir (el cuadrado con la flecha) y elige «Añadir a pantalla de inicio».'
+        : 'Abre el menú del navegador (⋮) y elige «Instalar aplicación» o «Añadir a pantalla de inicio». Funciona en Chrome, Edge y Samsung Internet.'),
+      el('p', { class: 'hint' }, 'Una vez instalada, Paperbook se abre a pantalla completa con su propio icono y funciona sin conexión.'),
+      el('div', { class: 'row end' }, el('button', { class: 'btn primary', onclick: () => close(null) }, 'Entendido')));
+  });
+}
+
+function setupInstall() {
+  if (standalone()) return;
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; $install.hidden = false; });
+  addEventListener('appinstalled', () => { $install.hidden = true; toast('Paperbook instalada.'); });
+  if (isIOS()) $install.hidden = false; // Safari no ofrece instalación automática
+}
+
 const $file = el('input', {
   type: 'file', multiple: true, hidden: true, accept: 'application/pdf,image/*,.html,.htm,text/html',
   onchange: (e) => { addFiles([...e.target.files]); e.target.value = ''; },
@@ -43,7 +73,7 @@ function buildLib() {
             }, 250);
           },
         })),
-      $drive,
+      $install, $drive,
       el('button', { class: 'btn primary', html: icon('plus') + '<span>Añadir</span>', onclick: (e) => addMenu(e.currentTarget) })),
     el('div', { class: 'filters' }, $chips, $folder),
     $grid, $file);
@@ -353,9 +383,24 @@ async function main() {
   });
   setInterval(() => drive.schedule(0), 5 * 60_000);
 
+  setupInstall();
+  // "Abrir con Paperbook" desde el explorador de archivos (app instalada)
+  window.launchQueue?.setConsumer(async (params) => {
+    if (!params.files?.length) return;
+    const files = await Promise.all(params.files.map((h) => h.getFile()));
+    const before = new Set(store.docs.keys());
+    await addFiles(files);
+    const added = [...store.docs.keys()].filter((id) => !before.has(id));
+    if (added.length === 1) location.hash = '#/d/' + added[0];
+  });
+
   // "Compartir con Paperbook" (Android) o ?url=…
   const sp = new URLSearchParams(location.search);
   const shared = [sp.get('url'), sp.get('text'), sp.get('title')].map((s) => /https?:\/\/\S+/.exec(s || '')?.[0]).find(Boolean);
+  if (sp.get('new') === 'canvas') {
+    history.replaceState(null, '', location.pathname + location.hash);
+    newCanvas();
+  }
   if (shared) {
     history.replaceState(null, '', location.pathname + location.hash);
     webDialog(shared);
