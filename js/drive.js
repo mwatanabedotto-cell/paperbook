@@ -9,7 +9,7 @@ const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER = 'Paperbook';
-const SYNCED = ['title', 'type', 'mime', 'folder', 'createdAt', 'updatedAt', 'size', 'sourceUrl', 'pages', 'paper', 'tags', 'deleted'];
+const SYNCED = ['title', 'type', 'mime', 'folder', 'createdAt', 'updatedAt', 'size', 'sourceUrl', 'pages', 'paper', 'tags', 'space', 'deleted'];
 
 const ls = {
   get: (k) => localStorage.getItem('pb.' + k),
@@ -265,7 +265,7 @@ export const drive = {
       } else {
         const wasDirty = L.dirty;
         if ((rj.doc.updatedAt || 0) > (L.updatedAt || 0)) {
-          for (const k of ['title', 'folder', 'paper', 'tags', 'updatedAt']) L[k] = rj.doc[k];
+          for (const k of ['title', 'folder', 'paper', 'tags', 'space', 'updatedAt']) L[k] = rj.doc[k];
         }
         L.pages = Math.max(L.pages || 0, rj.doc.pages || 0) || undefined;
         L.deleted = L.deleted || rj.doc.deleted || undefined;

@@ -4,6 +4,7 @@ import { Viewer, makeThumb } from './viewer.js';
 import { drive } from './drive.js';
 import { indexSoon, indexPending, searchContent } from './search.js';
 import { p2p } from './p2p.js';
+import { spaces, me, MAX_MEMBERS, personHue } from './spaces.js';
 import { exportBackup, importBackup, deliver } from './backup.js';
 import { capture, fromHtmlFile, getProxy, setProxy, DEFAULT_PROXY } from './web.js';
 import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
@@ -11,7 +12,7 @@ import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
 const $lib = document.getElementById('library');
 const $viewer = document.getElementById('viewer');
 const TYPES = { pdf: ['PDF', 'file'], web: ['Web', 'globe'], image: ['Imagen', 'image'], canvas: ['Lienzo', 'canvas'] };
-const ui = { type: '', folder: '', tag: '', q: '', raw: '', hits: new Map() };
+const ui = { type: '', folder: '', tag: '', space: '', q: '', raw: '', hits: new Map() };
 let searchTimer, searchSeq = 0;
 let viewer = null;
 
@@ -90,6 +91,7 @@ function tagDialog(d) {
 
 const $folder = el('select', { class: 'folder', 'aria-label': 'Carpeta', onchange: (e) => { ui.folder = e.target.value; renderLib(); } });
 const $drive = el('button', { class: 'btn drive', onclick: () => driveDialog() });
+const $groupsBtn = el('button', { class: 'btn groupsbtn', html: icon('users') + '<span>Grupos</span>', onclick: () => groupsDialog() });
 const $install = el('button', { class: 'btn install', hidden: true, html: icon('download') + '<span>Instalar app</span>', onclick: () => installApp() });
 let installEvent = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -145,7 +147,7 @@ function buildLib() {
             }, 250);
           },
         })),
-      $install, $drive,
+      $install, $groupsBtn, $drive,
       el('button', { class: 'btn primary', html: icon('plus') + '<span>Añadir</span>', onclick: (e) => addMenu(e.currentTarget) })),
     el('div', { class: 'filters' }, $chips, $folder),
     $tagRow,
@@ -179,8 +181,15 @@ function renderLib() {
   for (const c of $chips.children) c.setAttribute('aria-pressed', c.dataset.t === ui.type);
   const tags = allTags();
   if (ui.tag && !tags.some(([t]) => t === ui.tag)) ui.tag = '';
-  $tagRow.hidden = !tags.length;
-  $tagRow.replaceChildren(el('span', { class: 'tagrow-label', html: icon('tag') }),
+  const groupList = spaces.list().filter((g) => g.kind === 'group');
+  if (ui.space && !spaces.get(ui.space)) ui.space = '';
+  $tagRow.hidden = !tags.length && !groupList.length;
+  $tagRow.replaceChildren(
+    ...groupList.map((g) => el('button', {
+      class: 'groupchip', type: 'button', 'aria-pressed': String(ui.space === g.id), html: icon('users'),
+      onclick: () => { ui.space = ui.space === g.id ? '' : g.id; renderLib(); },
+    }, g.name)),
+    ...(tags.length ? [el('span', { class: 'tagrow-label', html: icon('tag') })] : []),
     ...tags.map(([t, n]) => tagChip(t, {
       type: 'button', 'aria-pressed': String(ui.tag === t), title: `${n} ${n === 1 ? 'documento' : 'documentos'}`,
       onclick: () => { ui.tag = ui.tag === t ? '' : t; renderLib(); },
@@ -188,7 +197,7 @@ function renderLib() {
 
   const docs = all
     .filter((d) => (!ui.type || d.type === ui.type) && (!ui.folder || d.folder === ui.folder) &&
-      (!ui.tag || (d.tags || []).includes(ui.tag)) &&
+      (!ui.tag || (d.tags || []).includes(ui.tag)) && (!ui.space || d.space === ui.space) &&
       (!ui.q || foldText(d.title).includes(ui.q) || foldText(d.folder || '').includes(ui.q) ||
         (d.tags || []).some((t) => foldText(t).includes(ui.q)) || ui.hits.has(d.id)))
     .sort((a, b) => recency(b) - recency(a));
@@ -196,7 +205,7 @@ function renderLib() {
   if (!docs.length) {
     $grid.replaceChildren(el('div', { class: 'empty' },
       el('h2', {}, all.length ? 'Nada coincide con el filtro' : 'Tu biblioteca está vacía'),
-      el('p', {}, all.length ? 'Prueba con otra búsqueda, carpeta o etiqueta.'
+      el('p', {}, all.length ? 'Prueba con otra búsqueda, carpeta, etiqueta o grupo.'
         : 'Sube un PDF, guarda una página web o abre un lienzo en blanco para empezar a escribir.'),
       all.length ? null : el('div', { class: 'row' },
         el('button', { class: 'btn primary', html: icon('upload') + '<span>Subir archivos</span>', onclick: () => $file.click() }),
@@ -220,7 +229,9 @@ function card(d) {
       el('div', { class: 'info' },
         el('h3', {}, d.title),
         el('p', {}, [label, d.folder, fmtDate(recency(d)), d.noBlob ? 'pendiente de descarga' : null].filter(Boolean).join(' · ')),
-        d.tags?.length ? el('div', { class: 'tags' }, ...d.tags.map((t) => tagChip(t))) : null,
+        d.space || d.tags?.length ? el('div', { class: 'tags' },
+          d.space ? el('span', { class: 'shared', html: icon('users') }, spaces.get(d.space)?.name || 'Compartido') : null,
+          ...(d.tags || []).map((t) => tagChip(t))) : null,
         hit ? el('p', { class: 'snip' },
           el('strong', {}, `${hit.n} ${hit.n === 1 ? 'coincidencia' : 'coincidencias'}${d.type === 'pdf' ? ' · p. ' + (hit.page + 1) : ''}`),
           ' ' + hit.snip) : null)),
@@ -236,6 +247,7 @@ function cardMenu(anchor, d) {
         if (v) { d.title = v; d.updatedAt = Date.now(); await store.saveDoc(d); }
       },
     },
+    { icon: 'users', label: d.space ? 'Compartido…' : 'Compartir…', onClick: () => shareDialog(d) },
     { icon: 'tag', label: 'Etiquetas…', onClick: () => tagDialog(d) },
     {
       icon: 'folder', label: 'Mover a carpeta…', onClick: async () => {
@@ -259,9 +271,11 @@ function cardMenu(anchor, d) {
     '-',
     {
       icon: 'trash', danger: true, label: 'Eliminar', onClick: async () => {
-        const where = drive.connected ? ' Se eliminará también de Google Drive y de tus otros dispositivos.' : '';
+        const sp = spaces.get(d.space);
+        const where = (sp ? ` También se eliminará para las personas de «${sp.name}».` : '') +
+          (drive.connected ? ' Se eliminará también de Google Drive y de tus otros dispositivos.' : '');
         if (!(await askConfirm('Eliminar documento', `«${d.title}» y sus anotaciones se eliminarán.${where}`))) return;
-        if (!d.drive?.metaId && !d.drive?.contentId && !p2p.paired) return store.purgeDoc(d.id).then(renderLib);
+        if (!d.drive?.metaId && !d.drive?.contentId && !p2p.paired && !d.space) return store.purgeDoc(d.id).then(renderLib);
         d.deleted = true;
         d.updatedAt = Date.now();
         d.thumb = null;
@@ -429,6 +443,225 @@ function driveDialog() {
   });
 }
 
+// ---------- grupos y documentos compartidos ----------
+let groupsRender = null;
+
+async function ensureName() {
+  if (me.name) return true;
+  const v = await askText('¿Cómo te llamas?', { hint: 'Lo verán las personas con las que compartas documentos.', placeholder: 'Tu nombre', ok: 'Continuar' });
+  if (!v) return false;
+  me.name = v;
+  return true;
+}
+
+const avatar = (m) => el('span', {
+  class: 'av' + (m.online === false ? ' off' : ''), style: `--h:${personHue(m.device)}`,
+  title: (m.name || 'Sin nombre') + (m.online === false ? ' (desconectado)' : m.online ? ' (en línea)' : ''),
+}, (m.name || '?').trim().slice(0, 1).toUpperCase());
+
+function spaceMembers(s) {
+  const mesh = spaces.meshes.get(s.id);
+  const on = new Set((mesh?.people() || []).map((p) => p.device));
+  return s.members.map((m) => ({ ...m, online: m.device === me.device ? true : on.has(m.device), isMe: m.device === me.device }));
+}
+
+/** Muestra un código de invitación y gestiona la respuesta (se crea una sola vez por invitación). */
+function inviteBlock(spaceId, onDone) {
+  const box = el('div', { class: 'invite' });
+  let code = '', ask = null, error = '', live = true;
+  const render = () => {
+    if (!live) return;
+    box.replaceChildren(...[
+      el('p', {}, 'La otra persona abre Paperbook, pulsa «Grupos → Unirme con un código» y escribe:'),
+      el('div', { class: 'code', 'aria-label': 'Código de invitación' }, code ? code.slice(0, 3) + ' ' + code.slice(3) : '··· ···'),
+      ask
+        ? el('p', {}, el('strong', {}, `${ask.name || 'Alguien'} quiere unirse. ¿Lo aceptas?`))
+        : el('p', { class: 'hint' }, code ? 'Esperando… Mantén esta ventana abierta. El código sirve para una persona.' : 'Generando código…'),
+      ask
+        ? el('div', { class: 'row' },
+          el('button', { class: 'btn primary', onclick: () => { ask.res(true); ask = null; render(); } }, 'Aceptar'),
+          el('button', { class: 'btn', onclick: () => { ask.res(false); ask = null; render(); } }, 'Rechazar'))
+        : el('div', { class: 'row' }, el('button', { class: 'btn', onclick: () => { stop(); onDone(false); } }, 'Listo')),
+      error ? el('p', { class: 'hint error' }, error) : null,
+    ].filter(Boolean));
+  };
+  const stop = () => { if (live) { live = false; spaces.cancelInvite(); } };
+  render();
+  spaces.invite(spaceId, {
+    onCode: (c) => { code = c; render(); },
+    confirm: (name) => new Promise((res) => { ask = { name, res }; render(); }),
+  }).then((m) => {
+    live = false;
+    toast(`${m.name || 'La otra persona'} se unió.`);
+    onDone(true);
+  }).catch((e) => {
+    if (e.message !== 'cancelado') { error = e.message; render(); }
+  });
+  box.stop = stop;
+  return box;
+}
+
+function joinBlock(onDone) {
+  const input = el('input', { type: 'text', id: 'join-code', inputmode: 'numeric', autocomplete: 'off', maxlength: 7, placeholder: '000 000', class: 'codein', 'aria-label': 'Código de 6 cifras' });
+  const go = el('button', { type: 'submit', class: 'btn primary' }, 'Unirme');
+  const msg = el('p', { class: 'hint', 'aria-live': 'polite' }, '');
+  const form = el('form', {
+    class: 'joinform',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      go.disabled = true;
+      go.textContent = 'Conectando…';
+      msg.classList.remove('error');
+      msg.textContent = '';
+      try {
+        const s = await spaces.join(input.value);
+        toast(`Te uniste a «${s.name}». Los documentos llegan en unos segundos.`, { ms: 5000 });
+        onDone(true);
+      } catch (err) {
+        msg.textContent = err.message;
+        msg.classList.add('error');
+        go.disabled = false;
+        go.textContent = 'Unirme';
+      }
+    },
+  }, el('p', {}, 'Escribe el código de 6 cifras que te muestra la otra persona.'),
+    el('div', { class: 'row' }, input, go,
+      el('button', { type: 'button', class: 'btn', onclick: () => { spaces.cancelInvite(); onDone(false); } }, 'Cancelar')),
+    msg);
+  setTimeout(() => input.focus(), 30);
+  return form;
+}
+
+function spaceCard(s, { onInvite, close }) {
+  const people = spaceMembers(s);
+  const docs = spaces.docs(s.id);
+  const online = people.filter((m) => !m.isMe && m.online).length;
+  return el('div', { class: 'space' },
+    el('div', { class: 'space-head' },
+      el('div', {},
+        el('strong', {}, s.name),
+        el('span', { class: 'hint' }, ` · ${s.kind === 'doc' ? 'Documento compartido' : 'Grupo de estudio'}`)),
+      el('div', { class: 'avs' }, ...people.map(avatar))),
+    el('p', { class: 'hint' },
+      `${people.length} de ${MAX_MEMBERS} personas · ${docs.length} ${docs.length === 1 ? 'documento' : 'documentos'} · ` +
+      (people.length < 2 ? 'aún no has invitado a nadie' : online ? `${online} en línea` : 'nadie más en línea')),
+    el('div', { class: 'row' },
+      docs.length ? el('button', { class: 'btn', onclick: () => {
+        if (s.kind === 'doc' && docs.length === 1) { close(); location.hash = '#/d/' + docs[0].id; return; }
+        ui.space = s.id; close(); renderLib();
+      } }, s.kind === 'doc' ? 'Abrir' : 'Ver documentos') : null,
+      people.length < MAX_MEMBERS ? el('button', { class: 'btn', onclick: () => onInvite(s.id) }, 'Invitar') : null,
+      el('button', { class: 'btn ghostdanger', onclick: async () => {
+        const ok = await askConfirm(s.kind === 'doc' ? 'Dejar de compartir' : 'Salir del grupo',
+          `Dejarás de recibir y enviar cambios de «${s.name}». Te quedas con una copia de sus documentos tal como están ahora.`, 'Salir');
+        if (ok) { await spaces.leave(s.id); toast('Saliste de «' + s.name + '».'); }
+      } }, 'Salir')));
+}
+
+/** Diálogo principal de grupos. view: 'list' | 'join' | 'new' | { invite: spaceId } */
+async function groupsDialog(view = 'list') {
+  if (!(await ensureName())) return;
+  return dialog('Grupos y documentos compartidos', (dlg, close) => {
+    const body = el('div', { class: 'groups' });
+    let mode = view, block = null;
+    const go = (m) => {
+      block?.stop?.();
+      mode = m;
+      block = typeof m === 'object' && m.invite ? inviteBlock(m.invite, () => go('list')) : m === 'join' ? joinBlock(() => go('list')) : null;
+      render();
+    };
+    const render = () => {
+      const kids = [];
+      if (block) {
+        if (mode.invite) kids.push(el('h3', {}, `Invitar a «${spaces.get(mode.invite)?.name || ''}»`));
+        else kids.push(el('h3', {}, 'Unirme con un código'));
+        kids.push(block);
+      } else if (mode === 'new') {
+        const name = el('input', { type: 'text', id: 'group-name', placeholder: 'p. ej. Revalida — Clínica médica', autocomplete: 'off' });
+        kids.push(el('form', {
+          class: 'joinform',
+          onsubmit: (e) => {
+            e.preventDefault();
+            const s = spaces.create('group', name.value || 'Grupo de estudio');
+            go({ invite: s.id });
+          },
+        }, el('h3', {}, 'Nuevo grupo de estudio'),
+          el('p', { class: 'hint' }, `Hasta ${MAX_MEMBERS} personas. Cada una puede añadir documentos al grupo, y todas los ven y los editan a la vez.`),
+          name,
+          el('div', { class: 'row' },
+            el('button', { type: 'submit', class: 'btn primary' }, 'Crear e invitar'),
+            el('button', { type: 'button', class: 'btn', onclick: () => go('list') }, 'Cancelar'))));
+        setTimeout(() => name.focus(), 30);
+      } else {
+        const list = spaces.list();
+        if (!list.length) {
+          kids.push(el('p', {}, 'Edita documentos con otras personas al mismo tiempo: cada trazo aparece en las pantallas de todos al instante.'),
+            el('ul', { class: 'hint' },
+              el('li', {}, el('strong', {}, 'Compartir un documento: '), 'ábrelo y pulsa ⋯ → «Compartir». Solo ven ese documento.'),
+              el('li', {}, el('strong', {}, 'Grupo de estudio: '), `hasta ${MAX_MEMBERS} personas comparten varios documentos.`)));
+        }
+        for (const s of list) kids.push(spaceCard(s, { onInvite: (id) => go({ invite: id }), close }));
+        kids.push(el('div', { class: 'row' },
+          el('button', { class: 'btn primary', html: icon('plus') + '<span>Crear grupo de estudio</span>', onclick: () => go('new') }),
+          el('button', { class: 'btn', onclick: () => go('join') }, 'Unirme con un código')));
+        kids.push(el('p', { class: 'hint' }, `Tu nombre: ${me.name} · `,
+          el('a', { href: '#', onclick: async (e) => {
+            e.preventDefault();
+            const v = await askText('Tu nombre', { value: me.name, hint: 'Lo verán las personas de tus grupos.' });
+            if (v) { me.name = v; render(); }
+          } }, 'Cambiar')));
+      }
+      body.replaceChildren(...kids);
+    };
+    groupsRender = () => { if (!block && mode === 'list') render(); };
+    dlg.addEventListener('close', () => { groupsRender = null; block?.stop?.(); });
+    dlg.append(body, el('div', { class: 'row end' }, el('button', { class: 'btn', onclick: () => close(null) }, 'Cerrar')));
+    go(view);
+  });
+}
+
+/** Compartir un documento: solo él, o dentro de un grupo. */
+async function shareDialog(doc) {
+  const s = spaces.forDoc(doc);
+  if (s) return groupsDialog('list');
+  if (doc.space) {
+    return dialog('Documento compartido', (dlg, close) => dlg.append(
+      el('p', {}, 'Este documento está compartido desde otro de tus dispositivos. Para invitar a alguien, hazlo desde ese dispositivo.'),
+      el('div', { class: 'row end' }, el('button', { class: 'btn', onclick: () => close(null) }, 'Cerrar'))));
+  }
+  if (!(await ensureName())) return;
+  const groups = spaces.list().filter((g) => g.kind === 'group');
+  return dialog(`Compartir «${doc.title}»`, (dlg, close) => {
+    const body = el('div', { class: 'groups' });
+    let block = null;
+    const invite = (id) => {
+      block = inviteBlock(id, () => close(true));
+      body.replaceChildren(el('h3', {}, 'Invita a otra persona'), block);
+    };
+    body.append(
+      el('button', { class: 'choice', onclick: () => invite(spaces.create('doc', doc.title, doc.id).id) },
+        el('span', { class: 'choice-ic', html: icon('canvas') }),
+        el('span', {}, el('strong', {}, 'Compartir solo este documento'),
+          el('span', { class: 'hint' }, `Hasta ${MAX_MEMBERS} personas lo editan a la vez. No ven el resto de tu biblioteca.`))),
+      el('div', { class: 'choice static' },
+        el('span', { class: 'choice-ic', html: icon('users') }),
+        el('span', {}, el('strong', {}, 'Añadirlo a un grupo de estudio'),
+          el('span', { class: 'hint' }, groups.length ? 'Lo verán y editarán todas las personas del grupo.' : 'Aún no tienes grupos.'),
+          el('span', { class: 'row' },
+            ...groups.map((g) => el('button', { class: 'btn', onclick: async () => {
+              await spaces.addDoc(doc.id, g.id);
+              toast(`«${doc.title}» se comparte ahora con «${g.name}».`);
+              close(true);
+            } }, g.name)),
+            el('button', { class: 'btn', html: icon('plus') + '<span>Grupo nuevo</span>', onclick: async () => {
+              const name = await askText('Nuevo grupo de estudio', { placeholder: 'p. ej. Revalida — Clínica médica', ok: 'Crear' });
+              if (name) invite(spaces.create('group', name, doc.id).id);
+            } })))));
+    dlg.addEventListener('close', () => block?.stop?.());
+    dlg.append(body, el('div', { class: 'row end' }, el('button', { class: 'btn', onclick: () => close(null) }, 'Cerrar')));
+  });
+}
+
 let pairRender = null;
 
 /** Emparejar dispositivos con un código: sincronización directa, sin cuentas. */
@@ -569,7 +802,7 @@ async function route() {
     if (!d || d.deleted) { location.hash = ''; return; }
     $lib.hidden = true;
     $viewer.hidden = false;
-    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }, { q, onTags: tagDialog }));
+    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }, { q, onTags: tagDialog, onShare: shareDialog, presence: (id) => spaces.presence(id) }));
     try {
       await v.init();
       document.title = d.title + ' · Paperbook';
@@ -624,6 +857,12 @@ async function main() {
   drive.onState = renderDrive;
   p2p.onState = () => { renderDrive(); pairRender?.(); };
   p2p.start().catch((e) => console.warn(e));
+  let srt;
+  spaces.onState = () => {
+    groupsRender?.();
+    if (!viewer) { clearTimeout(srt); srt = setTimeout(renderLib, 80); }
+  };
+  spaces.start();
   drive.init();
   addEventListener('hashchange', route);
   await route();

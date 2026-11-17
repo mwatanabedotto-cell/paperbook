@@ -93,6 +93,7 @@ export class Viewer {
       el('button', { class: 'ib ' + cls, title, 'aria-label': title, html: icon(ic), onclick: fn });
 
     this.$title = el('div', { class: 'vtitle' }, doc.title);
+    this.$people = el('button', { class: 'people', hidden: true, onclick: () => this.opts.onShare?.(doc) });
     this.$page = el('button', { class: 'chip', title: 'Ir a la página…', onclick: () => this.askPage() }, '');
     this.$zoom = el('button', { class: 'chip zoomctl', title: 'Ajustar al ancho', onclick: () => this.setZoom(1) }, '100%');
     this.$undo = b('undo', 'Deshacer', () => this.doUndo());
@@ -101,7 +102,7 @@ export class Viewer {
     this.webWidth = WEB_W;
     const bar = el('header', { class: 'vbar' },
       b('back', 'Volver a la biblioteca', () => this.close()),
-      this.$title, this.$page,
+      this.$title, this.$people, this.$page,
       this.$ttsBtn,
       b('search', 'Buscar en el documento (Ctrl+F)', () => this.toggleFind(this.$find.hidden)),
       b('minus', 'Alejar', () => this.setZoom(this.zoom / 1.2), 'zoomctl'),
@@ -165,8 +166,21 @@ export class Viewer {
     }, { root: this.$scroll, rootMargin: '120% 0px' });
 
     this.ann = await store.holdAnn(doc.id);
+    this.remoteLive = new Map(); // persona → trazo que está dibujando ahora
     this.offStore = store.on((type, d) => {
-      if (type === 'ann' && d.id === doc.id) { this.ann = d.ann; this.redrawAll(); }
+      if (type === 'ann' && d.id === doc.id) {
+        this.ann = d.ann;
+        const k = this.cur?.s ? this.cur.p.key : null;
+        for (const p of this.pages) if (p.mounted && p.key !== k) this.redraw(p);
+        if (k != null) this.rebase(k);
+      } else if (type === 'remoteLive') {
+        const old = this.remoteLive.get(d.from);
+        if (d.s && d.id === doc.id) this.remoteLive.set(d.from, { key: d.key, s: d.s });
+        else this.remoteLive.delete(d.from);
+        for (const key of new Set([old?.key, d.id === doc.id ? d.key : undefined])) if (key != null) this.redrawKey(key);
+      } else if (type === 'presence') {
+        this.renderPeople();
+      }
     });
 
     await this.loadContent();
@@ -199,6 +213,8 @@ export class Viewer {
     }
     this.onScroll();
     if (this.opts.q) this.toggleFind(true, this.opts.q);
+    store.emit('view', { id: doc.id });
+    this.renderPeople();
     return this;
   }
 
@@ -375,6 +391,7 @@ export class Viewer {
 
   redraw(p, live) {
     if (!p.ink) return;
+    if (!live && this.cur?.s && this.cur.p === p && p.base) live = this.cur.s;
     const ctx = p.ink.getContext('2d');
     const W = p.ink.width;
     ctx.clearRect(0, 0, W, p.ink.height);
@@ -390,7 +407,43 @@ export class Viewer {
         drawStroke(ctx, s, W, p.offY);
       }
     }
+    for (const r of this.remoteLive?.values() || []) if (r.key === p.key) drawStroke(ctx, r.s, W, p.offY);
     if (live) drawStroke(ctx, live, W, p.offY);
+  }
+
+  /** Rehace la imagen de fondo del trazo en curso (llegaron trazos de otra persona mientras dibujas). */
+  rebase(key) {
+    const live = this.cur?.s;
+    for (const s of this.surfaces(key)) {
+      s.base = null;
+      const keepCur = this.cur;
+      this.cur = null;
+      this.redraw(s);
+      this.cur = keepCur;
+      s.base = el('canvas');
+      s.base.width = s.ink.width; s.base.height = s.ink.height;
+      s.base.getContext('2d').drawImage(s.ink, 0, 0);
+      this.redraw(s, live);
+    }
+  }
+
+  emitOps(add, del) {
+    if (add.length || del.length) store.emit('ops', { id: this.doc.id, add, del });
+  }
+
+  renderPeople() {
+    const info = this.opts.presence?.(this.doc.id);
+    const $p = this.$people;
+    if (!$p) return;
+    if (!info) { $p.hidden = true; return; }
+    const people = info.people.filter((x) => x.online);
+    $p.hidden = false;
+    $p.replaceChildren(...(people.length ? people.map((x) => el('span', {
+      class: 'av' + (x.here ? ' here' : ''), style: `--h:${x.hue}`, title: x.name + (x.here ? ' (en este documento)' : ' (en línea)'),
+    }, (x.name || '?').trim().slice(0, 1).toUpperCase())) : [el('span', { class: 'av off', html: icon('users') })]));
+    const here = people.filter((x) => x.here).map((x) => x.name || 'Alguien');
+    $p.title = (here.length ? `En este documento: ${here.join(', ')}. ` : people.length ? 'En línea: ' + people.map((x) => x.name).join(', ') + '. ' : 'Nadie más en línea. ') + 'Compartido en «' + info.space.name + '».';
+    $p.setAttribute('aria-label', $p.title);
   }
 
   surfaces(key) { return this.pages.filter((p) => p.mounted && p.key === key); }
@@ -464,6 +517,10 @@ export class Viewer {
     if (c.s && !c.raf) {
       c.raf = requestAnimationFrame(() => { c.raf = 0; if (this.cur === c) this.redrawKey(c.p.key, c.s); });
     }
+    if (c.s && this.doc.space && Date.now() - (c.lt || 0) > 70) {
+      c.lt = Date.now();
+      store.emit('live', { id: this.doc.id, key: c.p.key, s: c.s });
+    }
   }
 
   onUp(e, cancelled) {
@@ -473,9 +530,13 @@ export class Viewer {
     this.cur = null;
     cancelAnimationFrame(c.raf);
     for (const s of this.surfaces(c.p.key)) s.base = null;
+    if (c.lt) store.emit('live', { id: this.doc.id, key: c.p.key, s: null });
     if (c.t === 'text') { if (!cancelled) this.openText(c.p, c.pt); return; }
     if (c.t === 'eraser') {
-      if (c.gone.length) { this.undo.push({ add: c.gone, del: [] }); this.redo = []; this.changed(); }
+      if (c.gone.length) {
+        this.undo.push({ add: c.gone, del: [] }); this.redo = []; this.changed();
+        this.emitOps([], c.gone.map((g) => g.s.id));
+      }
       return;
     }
     const P = c.s.p;
@@ -486,6 +547,7 @@ export class Viewer {
       this.undo.push({ add: [], del: [{ key: c.p.key, s: c.s }] });
       this.redo = [];
       this.changed();
+      this.emitOps([{ key: c.p.key, s: c.s }], []);
     }
     this.redrawKey(c.p.key);
   }
@@ -496,6 +558,7 @@ export class Viewer {
     this.cur = null;
     cancelAnimationFrame(c.raf);
     for (const s of this.surfaces(c.p.key)) s.base = null;
+    if (c.lt) store.emit('live', { id: this.doc.id, key: c.p.key, s: null });
     this.redrawKey(c.p.key);
   }
 
@@ -577,6 +640,7 @@ export class Viewer {
     this.undo.push({ add: [], del: [{ key: t.p.key, s }] });
     this.redo = [];
     this.changed();
+    this.emitOps([{ key: t.p.key, s }], []);
     this.redrawKey(t.p.key);
   }
 
@@ -800,6 +864,7 @@ export class Viewer {
     }
     this.changed();
     this.redrawAll();
+    this.emitOps(op.add.map((e) => ({ key: e.key, s: e.s })), op.del.map((e) => e.s.id));
     return { add: op.del, del: op.add };
   }
   doUndo() { if (this.undo.length) this.redo.push(this.apply(this.undo.pop())); this.updateUndo(); }
@@ -864,6 +929,10 @@ export class Viewer {
           this.finger = !this.finger; this.penSeen = true; this.savePrefs();
           toast(this.finger ? 'El dedo dibuja. Usa dos dedos para mover y hacer zoom.' : 'El dedo desplaza; el lápiz o el ratón dibujan.');
         },
+      },
+      this.opts.onShare && {
+        icon: 'users', label: doc.space ? 'Compartido: invitar o ver participantes…' : 'Compartir o editar con otras personas…',
+        onClick: () => this.opts.onShare(doc),
       },
       this.opts.onTags && {
         icon: 'tag', label: 'Etiquetas…' + (doc.tags?.length ? ` (${doc.tags.join(', ')})` : ''),
@@ -969,6 +1038,7 @@ export class Viewer {
 
   async close() {
     this.reader?.close();
+    store.emit('view', { id: null });
     this.commitText();
     this.cancelStroke();
     this.savePos();

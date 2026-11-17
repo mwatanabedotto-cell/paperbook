@@ -12,6 +12,9 @@ sin servidor propio y sin paso de compilación.
 - **Lectura en voz alta**: lee PDF, páginas web y notas desde donde estás mirando, resalta la frase,
   pasa de página sola y elige la voz según el idioma (español, portugués, inglés). Usa las voces del sistema.
 - **Etiquetas**: varias por documento, con filtro en la biblioteca; se sincronizan con los demás dispositivos.
+- **Edición en grupo**: compartir un documento, o crear un grupo de estudio de hasta 4 personas.
+  Los trazos llegan al instante a las demás pantallas, se ve el trazo en curso y quién está en el
+  documento. Se entra con un código de 6 cifras que alguien del grupo acepta.
 - **Búsqueda**: el buscador de la biblioteca encuentra palabras dentro de los PDF y páginas web (sin
   distinguir acentos ni mayúsculas) y abre el documento en la primera coincidencia. Dentro del visor,
   la lupa o Ctrl+F resalta y recorre los resultados. Los PDF escaneados (solo imagen) no tienen texto que buscar.
@@ -167,7 +170,9 @@ js/ink.js                   motor de tinta (dibujo y borrado de trazos)
 js/store.js                 almacenamiento local y fusión de anotaciones
 js/drive.js                 sincronización con Google Drive
 js/web.js                   captura de páginas web
-js/p2p.js                   sincronización directa entre dispositivos emparejados
+js/mesh.js                  conexión directa entre dispositivos (WebRTC) y sincronización
+js/p2p.js                   emparejar tus propios dispositivos
+js/spaces.js                documentos compartidos y grupos de estudio
 js/backup.js                archivo de copia y fusión de documentos recibidos
 js/search.js                índice de texto para la búsqueda
 js/tts.js                   lectura en voz alta
