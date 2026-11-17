@@ -3,6 +3,7 @@ import { store, newId, foldText } from './store.js';
 import { Viewer, makeThumb } from './viewer.js';
 import { drive } from './drive.js';
 import { indexSoon, indexPending, searchContent } from './search.js';
+import { exportBackup, importBackup, deliver } from './backup.js';
 import { capture, fromHtmlFile, getProxy, setProxy, DEFAULT_PROXY } from './web.js';
 import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
 
@@ -278,7 +279,7 @@ function webDialog(prefill = '') {
 function renderDrive() {
   const s = drive.state;
   const text = {
-    off: 'Conectar Drive', idle: 'Sincronizado', syncing: 'Sincronizando…', error: 'Error de Drive', auth: 'Reconectar Drive',
+    off: 'Sincronizar', idle: 'Sincronizado', syncing: 'Sincronizando…', error: 'Error de Drive', auth: 'Reconectar Drive',
   }[s];
   $drive.innerHTML = icon('cloud') + `<span>${text}</span>`;
   $drive.dataset.state = s;
@@ -286,7 +287,7 @@ function renderDrive() {
 }
 
 function driveDialog() {
-  return dialog('Google Drive', (dlg, close) => {
+  return dialog('Sincronizar', (dlg, close) => {
     const id = el('input', { type: 'text', value: drive.clientId, placeholder: 'xxxxxxxx.apps.googleusercontent.com', autocomplete: 'off', spellcheck: 'false' });
     const proxy = el('input', { type: 'url', value: getProxy(), placeholder: 'vacío = sin proxy' });
     const native = !!window.paperbookNative;
@@ -329,7 +330,61 @@ function driveDialog() {
       native ? null : el('p', { class: 'hint' }, `Recibe la dirección de las páginas que guardas. Predeterminado: ${DEFAULT_PROXY}`),
       el('div', { class: 'row end' },
         el('button', { class: 'btn', onclick: () => { setProxy(proxy.value.trim()); close(null); } }, 'Cerrar')));
+    // Drive automático queda plegado; arriba va la forma sencilla (archivo de copia).
+    for (const n of [...dlg.childNodes]) if (n.nodeType === 3) n.remove(); // append(null) deja texto «null»
+    const adv = el('details', { class: 'adv' }, el('summary', {}, 'Sincronización automática con Google Drive'));
+    adv.open = drive.connected;
+    const closeRow = dlg.lastElementChild;
+    adv.append(...[...dlg.children].slice(1, -1));
+    dlg.insertBefore(adv, closeRow);
+    dlg.insertBefore(backupSection(), adv);
   });
+}
+
+function backupSection() {
+  const msg = el('p', { class: 'hint', 'aria-live': 'polite' }, '');
+  const say = (t, err) => { msg.textContent = t; msg.classList.toggle('error', !!err); };
+  const pick = el('input', {
+    type: 'file', hidden: true,
+    onchange: async (e) => {
+      const f = e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      say('Cargando copia…');
+      try {
+        const r = await importBackup(f);
+        const parts = [];
+        if (r.added) parts.push(`${r.added} ${r.added === 1 ? 'documento nuevo' : 'documentos nuevos'}`);
+        if (r.merged) parts.push(`${r.merged} ${r.merged === 1 ? 'actualizado' : 'actualizados'}`);
+        say((parts.join(', ') || 'No había nada nuevo') + '.' +
+          (r.missing ? ` ${r.missing} no están en este dispositivo: para traerlos, guarda en el otro una «copia completa».` : ''), !!r.missing && !parts.length);
+        renderLib();
+      } catch (err) {
+        say(err.message || String(err), true);
+      }
+    },
+  });
+  const save = async (full) => {
+    say('Preparando copia…');
+    try {
+      const file = await exportBackup({ full });
+      const how = await deliver(file);
+      say(how === 'cancelled' ? '' : how === 'shared' ? 'Copia enviada.'
+        : `Copia descargada: ${file.name} (${file.size < 1e6 ? Math.max(1, Math.round(file.size / 1e3)) + ' KB' : (file.size / 1e6).toFixed(1).replace('.', ',') + ' MB'}). Súbela a tu Drive para abrirla en el otro dispositivo.`);
+    } catch (err) {
+      say(err.message || String(err), true);
+    }
+  };
+  return el('section', { class: 'backup' },
+    el('p', {}, 'Pasa tus documentos y anotaciones de un dispositivo a otro con un archivo. No hay que configurar nada.'),
+    el('div', { class: 'row' },
+      el('button', { class: 'btn primary', html: icon('upload') + '<span>Guardar copia</span>', onclick: (e) => menu(e.currentTarget, [
+        { icon: 'file', label: 'Copia completa (documentos y anotaciones)', onClick: () => save(true) },
+        { icon: 'pen', label: 'Solo anotaciones y lienzos (archivo pequeño)', onClick: () => save(false) },
+      ]) }),
+      el('button', { class: 'btn', html: icon('download') + '<span>Cargar copia</span>', onclick: () => pick.click() })),
+    el('p', { class: 'hint' }, 'En el otro dispositivo pulsa «Cargar copia» y elige el archivo (puedes tomarlo directamente de Google Drive). Lo cargado se combina con lo que ya tienes: no borra nada.'),
+    msg, pick);
 }
 
 // ---------- navegación ----------

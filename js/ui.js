@@ -74,7 +74,7 @@ export function menu(anchor, items) {
     }));
     m.lastChild.querySelector('span').textContent = it.label;
   }
-  document.body.append(m);
+  (anchor.closest("dialog") || document.body).append(m);
   const r = anchor.getBoundingClientRect();
   const mw = m.offsetWidth, mh = m.offsetHeight;
   m.style.left = Math.max(8, Math.min(r.right - mw, innerWidth - mw - 8)) + 'px';

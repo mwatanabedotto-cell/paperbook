@@ -75,6 +75,20 @@ El APK se firma con la clave `android/app/paperbook.keystore`, incluida en el re
 las versiones nuevas se instalen encima de las anteriores. Vale para uso personal; para publicar en
 una tienda, sustitúyela por una clave privada.
 
+## Sincronizar sin configurar nada (archivo de copia)
+
+Botón **Sincronizar** → **Guardar copia**. Se genera un archivo `.paperbook` con tus documentos y
+anotaciones; súbelo a tu Drive (o pásalo como quieras) y en el otro dispositivo pulsa
+**Sincronizar → Cargar copia** y elígelo. Lo cargado se combina con lo que ya hay: no borra nada y
+las anotaciones de ambos lados se conservan.
+
+- **Copia completa**: incluye los PDF, imágenes y páginas. Úsala la primera vez.
+- **Solo anotaciones y lienzos**: archivo pequeño para el día a día, cuando los documentos ya están en
+  los dos dispositivos.
+
+La sección siguiente explica la sincronización automática, que es más cómoda pero requiere crear una
+credencial de Google una vez. Si pegas ese ID en `js/config.js`, en cada dispositivo bastará un toque.
+
 ## Sincronizar con Google Drive
 
 La app habla directamente con tu Drive, sin servidor intermedio. Para eso Google exige un

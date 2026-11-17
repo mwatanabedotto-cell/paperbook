@@ -3,6 +3,7 @@
 import { store, mergeAnn, emptyAnn } from './store.js';
 import { makeThumb } from './viewer.js';
 import { indexSoon } from './search.js';
+import { GOOGLE_CLIENT_ID } from './config.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
@@ -26,7 +27,7 @@ export const drive = {
   lastSync: +ls.get('lastSync') || 0,
   onState: () => {},
 
-  get clientId() { return ls.get('clientId') || ''; },
+  get clientId() { return ls.get('clientId') || GOOGLE_CLIENT_ID || ''; },
   set clientId(v) { ls.set('clientId', v || null); },
   get clientSecret() { return ls.get('clientSecret') || ''; },
   set clientSecret(v) { ls.set('clientSecret', v || null); },
