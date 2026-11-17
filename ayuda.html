@@ -98,6 +98,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <li><a href="#instalar">Instalar</a></li>
       <li><a href="#documentos">Añadir documentos</a></li>
       <li><a href="#anotar">Anotar</a></li>
+      <li><a href="#escuchar">Escuchar</a></li>
       <li><a href="#buscar">Buscar y organizar</a></li>
       <li><a href="#sincronizar">Sincronizar</a></li>
       <li><a href="#datos">Tus datos</a></li>
@@ -179,11 +180,27 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
     <p>Menú <kbd>⋯</kbd> → <b>Exportar esta página como imagen</b> guarda la página con tus anotaciones como PNG, para enviarla o imprimirla.</p>
   </section>
 
+  <section id="escuchar">
+    <h2>4. Escuchar un documento</h2>
+    <p>Paperbook puede leerte en voz alta los PDF, las páginas web guardadas y las notas de texto de un lienzo.</p>
+    <ol>
+      <li>Abre el documento y ve a donde quieres empezar.</li>
+      <li>Toca el altavoz de arriba. Empieza a leer desde lo que tienes en pantalla, resalta en azul la frase que está leyendo y pasa de página sola.</li>
+    </ol>
+    <ul>
+      <li><kbd>⏮</kbd> y <kbd>⏭</kbd> saltan a la frase anterior o siguiente; el botón central pausa y continúa.</li>
+      <li><b>Velocidad</b>: de 0,75× a 2×.</li>
+      <li><b>Voz</b>: «Voz automática» elige sola una voz en español, portugués o inglés según el idioma del texto. También puedes elegir una voz concreta.</li>
+    </ul>
+    <p class="note">Usa las voces instaladas en tu dispositivo. Si dice «No hay voces instaladas»: en Android ve a <b>Ajustes → Accesibilidad → Texto a voz</b> e instala «Servicios de voz de Google» con el idioma que necesites; en Linux instala <code>speech-dispatcher</code> y <code>espeak-ng</code>. Los PDF escaneados no tienen texto que leer.</p>
+  </section>
+
   <section id="buscar">
-    <h2>4. Buscar y organizar</h2>
+    <h2>5. Buscar y organizar</h2>
     <ul>
       <li><b>En toda la biblioteca</b>: escribe en el buscador de arriba. Encuentra palabras en los títulos y <b>dentro</b> de los PDF y páginas web, sin importar acentos ni mayúsculas («laparoscopica» encuentra «laparoscópica»). Toca un resultado para abrirlo justo en esa parte.</li>
       <li><b>Dentro de un documento</b>: toca la lupa (o <kbd>Ctrl</kbd>+<kbd>F</kbd>). Las flechas te llevan de un resultado al siguiente.</li>
+      <li><b>Etiquetas</b>: en cada documento, menú <kbd>⋮</kbd> → <b>Etiquetas…</b> (o dentro del documento, menú <kbd>⋯</kbd>). Toca las que ya existen o escribe nuevas, por ejemplo «Cirugía», «Revalida», «Repasar». Un documento puede tener varias. Las etiquetas aparecen bajo los filtros de la biblioteca: toca una para ver solo esos documentos, y vuelve a tocarla para quitar el filtro. El buscador también encuentra por etiqueta.</li>
       <li><b>Carpetas</b>: en cada documento, menú <kbd>⋮</kbd> → <b>Mover a carpeta…</b> y escribe un nombre (por ejemplo «Cirugía»). Luego filtra con el selector de carpetas.</li>
       <li><b>Filtrar por tipo</b>: botones PDF, Web, Imagen o Lienzo.</li>
     </ul>
@@ -191,7 +208,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
   </section>
 
   <section id="sincronizar">
-    <h2>5. Sincronizar tus dispositivos</h2>
+    <h2>6. Sincronizar tus dispositivos</h2>
     <p>Pulsa <b>Sincronizar</b> en la biblioteca. Hay tres formas; la mayoría de las personas solo necesita la primera.</p>
     <div class="cards">
       <div class="card">
@@ -215,7 +232,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <li>En el otro: <b>Sincronizar → Tengo un código</b>, escribe las cifras y pulsa <b>Conectar</b>.</li>
       <li>En el primero, pulsa <b>Aceptar</b>.</li>
     </ol>
-    <p>Listo: los documentos, las anotaciones, los cambios de nombre y los borrados pasan solos de uno a otro. El botón de arriba dice <b>Conectado</b> cuando están en contacto y <b>Emparejado</b> cuando el otro está cerrado; lo que hagas mientras tanto se envía cuando vuelvan a coincidir. Para sumar un tercer dispositivo usa <b>Añadir otro dispositivo</b>.</p>
+    <p>Listo: los documentos, las anotaciones, las etiquetas, los cambios de nombre y los borrados pasan solos de uno a otro. El botón de arriba dice <b>Conectado</b> cuando están en contacto y <b>Emparejado</b> cuando el otro está cerrado; lo que hagas mientras tanto se envía cuando vuelvan a coincidir. Para sumar un tercer dispositivo usa <b>Añadir otro dispositivo</b>.</p>
     <p class="note">Empareja solo tus propios dispositivos. Quien se empareje contigo verá y podrá cambiar todos tus documentos. Si alguien te pide un código, no lo aceptes. Para dejar de compartir: <b>Sincronizar → Desemparejar</b>.</p>
 
     <h3>Archivo de copia</h3>
@@ -227,7 +244,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
   </section>
 
   <section id="datos">
-    <h2>6. Dónde están tus datos</h2>
+    <h2>7. Dónde están tus datos</h2>
     <ul>
       <li>Tus documentos se guardan <b>en tu dispositivo</b>, no en un servidor. Nadie más los ve.</li>
       <li>Cada persona tiene su propia biblioteca. Si varias personas usan la app, cada una ve solo lo suyo.</li>
@@ -237,7 +254,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
   </section>
 
   <section id="problemas">
-    <h2>7. Problemas frecuentes</h2>
+    <h2>8. Problemas frecuentes</h2>
     <details>
       <summary>No aparece el código al pulsar «Mostrar un código»</summary>
       <p>Hace falta conexión a internet para que los dispositivos se encuentren. Revisa la conexión y vuelve a intentarlo.</p>

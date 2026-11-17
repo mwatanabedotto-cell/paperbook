@@ -6,7 +6,7 @@ import { makeThumb } from './viewer.js';
 import { indexSoon } from './search.js';
 
 const MAGIC = 'PBK1';
-const FIELDS = ['id', 'title', 'type', 'mime', 'folder', 'createdAt', 'updatedAt', 'size', 'sourceUrl', 'pages', 'paper'];
+const FIELDS = ['id', 'title', 'type', 'mime', 'folder', 'createdAt', 'updatedAt', 'size', 'sourceUrl', 'pages', 'paper', 'tags'];
 
 /** Crea el archivo de copia. `full` incluye los PDF, imágenes y páginas; si no, solo anotaciones y lienzos. */
 export async function exportBackup({ full }) {
@@ -55,7 +55,7 @@ export function docSig(d, ann) {
     n += arr.length;
     for (const s of arr) if (s.id > last) last = s.id;
   }
-  return [norm(d.updatedAt), norm(d.title), norm(d.folder), norm(d.paper), d.pages || 0, n, last,
+  return [norm(d.updatedAt), norm(d.title), norm(d.folder), norm(d.paper), (d.tags || []).join(','), d.pages || 0, n, last,
     Object.keys(ann?.removed || {}).length].join('|');
 }
 
@@ -78,10 +78,10 @@ export async function mergeIncoming(meta, ann, blob) {
   if (L) {
     const mine = await store.getAnn(id);
     const before = docSig(L, mine);
-    const key = (d) => JSON.stringify([norm(d.title), norm(d.folder), norm(d.paper)]);
+    const key = (d) => JSON.stringify([norm(d.title), norm(d.folder), norm(d.paper), d.tags || []]);
     const ru = meta.updatedAt || 0, lu = L.updatedAt || 0;
     if (ru > lu || (ru === lu && key(meta) > key(L))) {
-      for (const k of ['title', 'folder', 'paper', 'updatedAt']) L[k] = meta[k];
+      for (const k of ['title', 'folder', 'paper', 'tags', 'updatedAt']) L[k] = meta[k];
     }
     L.pages = Math.max(L.pages || 0, meta.pages || 0) || undefined;
     const merged = mergeAnn(mine, ann);

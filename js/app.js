@@ -11,13 +11,83 @@ import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
 const $lib = document.getElementById('library');
 const $viewer = document.getElementById('viewer');
 const TYPES = { pdf: ['PDF', 'file'], web: ['Web', 'globe'], image: ['Imagen', 'image'], canvas: ['Lienzo', 'canvas'] };
-const ui = { type: '', folder: '', q: '', raw: '', hits: new Map() };
+const ui = { type: '', folder: '', tag: '', q: '', raw: '', hits: new Map() };
 let searchTimer, searchSeq = 0;
 let viewer = null;
 
 // ---------- biblioteca ----------
 const $grid = el('div', { class: 'grid' });
 const $chips = el('div', { class: 'chips', role: 'group', 'aria-label': 'Filtrar por tipo' });
+const $tagRow = el('div', { class: 'tagrow', role: 'group', 'aria-label': 'Filtrar por etiqueta' });
+
+/** Color estable para cada etiqueta (el mismo en todos los dispositivos). */
+function tagHue(t) {
+  let h = 0;
+  for (const ch of foldText(t)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 360;
+}
+const tagChip = (t, attrs = {}) => el(attrs.onclick ? 'button' : 'span', { class: 'tag', style: `--h:${tagHue(t)}`, ...attrs }, t);
+const allTags = () => {
+  const m = new Map();
+  for (const d of store.visible()) for (const t of d.tags || []) m.set(t, (m.get(t) || 0) + 1);
+  return [...m].sort((a, b) => a[0].localeCompare(b[0], 'es'));
+};
+const normTags = (list) => {
+  const seen = new Map();
+  for (const raw of list) {
+    const t = raw.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (t && !seen.has(foldText(t))) seen.set(foldText(t), t);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+};
+
+/** Diálogo para poner y quitar etiquetas de un documento. */
+function tagDialog(d) {
+  return dialog('Etiquetas', (dlg, close) => {
+    const chosen = new Set(d.tags || []);
+    const known = allTags().map(([t]) => t);
+    const list = el('div', { class: 'tagpick' });
+    const draw = () => {
+      const tags = normTags([...known, ...chosen]);
+      list.replaceChildren(...tags.map((t) => tagChip(t, {
+        type: 'button', 'aria-pressed': String(chosen.has(t)),
+        onclick: () => { chosen.has(t) ? chosen.delete(t) : chosen.add(t); draw(); },
+      })));
+      if (!tags.length) list.append(el('p', { class: 'hint' }, 'Aún no tienes etiquetas. Escribe la primera abajo.'));
+    };
+    const input = el('input', { type: 'text', id: 'tag-new', placeholder: 'Nueva etiqueta: p. ej. Cirugía, Revalida, Repasar', autocomplete: 'off', enterkeyhint: 'done' });
+    const addTyped = () => {
+      const parts = input.value.split(',').map((x) => x.trim()).filter(Boolean);
+      for (const t of normTags(parts)) {
+        const same = [...known, ...chosen].find((k) => foldText(k) === foldText(t));
+        chosen.add(same || t);
+      }
+      input.value = '';
+      draw();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTyped(); } });
+    dlg.append(
+      el('p', { class: 'hint' }, `«${d.title}». Toca una etiqueta para ponerla o quitarla.`),
+      list,
+      el('div', { class: 'row tagadd' }, input, el('button', { type: 'button', class: 'btn', onclick: addTyped }, 'Añadir')),
+      el('div', { class: 'row end' },
+        el('button', { type: 'button', class: 'btn', onclick: () => close(null) }, 'Cancelar'),
+        el('button', {
+          type: 'button', class: 'btn primary', onclick: async () => {
+            if (input.value.trim()) addTyped();
+            const next = normTags([...chosen]);
+            if (JSON.stringify(next) !== JSON.stringify(d.tags || [])) {
+              d.tags = next.length ? next : undefined;
+              d.updatedAt = Date.now();
+              await store.saveDoc(d);
+            }
+            close(true);
+          },
+        }, 'Guardar')));
+    draw();
+  });
+}
+
 const $folder = el('select', { class: 'folder', 'aria-label': 'Carpeta', onchange: (e) => { ui.folder = e.target.value; renderLib(); } });
 const $drive = el('button', { class: 'btn drive', onclick: () => driveDialog() });
 const $install = el('button', { class: 'btn install', hidden: true, html: icon('download') + '<span>Instalar app</span>', onclick: () => installApp() });
@@ -78,6 +148,7 @@ function buildLib() {
       $install, $drive,
       el('button', { class: 'btn primary', html: icon('plus') + '<span>Añadir</span>', onclick: (e) => addMenu(e.currentTarget) })),
     el('div', { class: 'filters' }, $chips, $folder),
+    $tagRow,
     $grid, $file,
     el('p', { class: 'foot' },
       el('a', { href: 'ayuda.html' }, 'Cómo se usa'),
@@ -106,16 +177,26 @@ function renderLib() {
     ...folders.map((f) => el('option', { value: f, selected: f === ui.folder }, f)));
   $folder.hidden = !folders.length;
   for (const c of $chips.children) c.setAttribute('aria-pressed', c.dataset.t === ui.type);
+  const tags = allTags();
+  if (ui.tag && !tags.some(([t]) => t === ui.tag)) ui.tag = '';
+  $tagRow.hidden = !tags.length;
+  $tagRow.replaceChildren(el('span', { class: 'tagrow-label', html: icon('tag') }),
+    ...tags.map(([t, n]) => tagChip(t, {
+      type: 'button', 'aria-pressed': String(ui.tag === t), title: `${n} ${n === 1 ? 'documento' : 'documentos'}`,
+      onclick: () => { ui.tag = ui.tag === t ? '' : t; renderLib(); },
+    })));
 
   const docs = all
     .filter((d) => (!ui.type || d.type === ui.type) && (!ui.folder || d.folder === ui.folder) &&
-      (!ui.q || foldText(d.title).includes(ui.q) || foldText(d.folder || '').includes(ui.q) || ui.hits.has(d.id)))
+      (!ui.tag || (d.tags || []).includes(ui.tag)) &&
+      (!ui.q || foldText(d.title).includes(ui.q) || foldText(d.folder || '').includes(ui.q) ||
+        (d.tags || []).some((t) => foldText(t).includes(ui.q)) || ui.hits.has(d.id)))
     .sort((a, b) => recency(b) - recency(a));
 
   if (!docs.length) {
     $grid.replaceChildren(el('div', { class: 'empty' },
       el('h2', {}, all.length ? 'Nada coincide con el filtro' : 'Tu biblioteca está vacía'),
-      el('p', {}, all.length ? 'Prueba con otra búsqueda o cambia de carpeta.'
+      el('p', {}, all.length ? 'Prueba con otra búsqueda, carpeta o etiqueta.'
         : 'Sube un PDF, guarda una página web o abre un lienzo en blanco para empezar a escribir.'),
       all.length ? null : el('div', { class: 'row' },
         el('button', { class: 'btn primary', html: icon('upload') + '<span>Subir archivos</span>', onclick: () => $file.click() }),
@@ -139,6 +220,7 @@ function card(d) {
       el('div', { class: 'info' },
         el('h3', {}, d.title),
         el('p', {}, [label, d.folder, fmtDate(recency(d)), d.noBlob ? 'pendiente de descarga' : null].filter(Boolean).join(' · ')),
+        d.tags?.length ? el('div', { class: 'tags' }, ...d.tags.map((t) => tagChip(t))) : null,
         hit ? el('p', { class: 'snip' },
           el('strong', {}, `${hit.n} ${hit.n === 1 ? 'coincidencia' : 'coincidencias'}${d.type === 'pdf' ? ' · p. ' + (hit.page + 1) : ''}`),
           ' ' + hit.snip) : null)),
@@ -154,6 +236,7 @@ function cardMenu(anchor, d) {
         if (v) { d.title = v; d.updatedAt = Date.now(); await store.saveDoc(d); }
       },
     },
+    { icon: 'tag', label: 'Etiquetas…', onClick: () => tagDialog(d) },
     {
       icon: 'folder', label: 'Mover a carpeta…', onClick: async () => {
         const fs = [...new Set(store.visible().map((x) => x.folder).filter(Boolean))];
@@ -486,7 +569,7 @@ async function route() {
     if (!d || d.deleted) { location.hash = ''; return; }
     $lib.hidden = true;
     $viewer.hidden = false;
-    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }, { q }));
+    const v = (viewer = new Viewer($viewer, d, () => { if (viewer === v) { viewer = null; location.hash = ''; } }, { q, onTags: tagDialog }));
     try {
       await v.init();
       document.title = d.title + ' · Paperbook';

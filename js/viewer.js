@@ -3,6 +3,7 @@ import * as pdfjs from '../vendor/pdfjs/pdf.min.mjs';
 import { store, newId, fold, foldText } from './store.js';
 import { drawStroke, hit, bounds } from './ink.js';
 import { icon, el, toast, menu, askText, askConfirm } from './ui.js';
+import { Reader, ttsSupported } from './tts.js';
 
 const vend = (p) => new URL('../vendor/pdfjs/' + p, import.meta.url).href;
 pdfjs.GlobalWorkerOptions.workerSrc = vend('pdf.worker.min.mjs');
@@ -93,16 +94,19 @@ export class Viewer {
 
     this.$title = el('div', { class: 'vtitle' }, doc.title);
     this.$page = el('button', { class: 'chip', title: 'Ir a la página…', onclick: () => this.askPage() }, '');
-    this.$zoom = el('button', { class: 'chip', title: 'Ajustar al ancho', onclick: () => this.setZoom(1) }, '100%');
+    this.$zoom = el('button', { class: 'chip zoomctl', title: 'Ajustar al ancho', onclick: () => this.setZoom(1) }, '100%');
     this.$undo = b('undo', 'Deshacer', () => this.doUndo());
     this.$redo = b('redo', 'Rehacer', () => this.doRedo());
+    this.$ttsBtn = ttsSupported ? b('speaker', 'Leer en voz alta', () => this.toggleTts()) : null;
+    this.webWidth = WEB_W;
     const bar = el('header', { class: 'vbar' },
       b('back', 'Volver a la biblioteca', () => this.close()),
       this.$title, this.$page,
+      this.$ttsBtn,
       b('search', 'Buscar en el documento (Ctrl+F)', () => this.toggleFind(this.$find.hidden)),
-      b('minus', 'Alejar', () => this.setZoom(this.zoom / 1.2)),
+      b('minus', 'Alejar', () => this.setZoom(this.zoom / 1.2), 'zoomctl'),
       this.$zoom,
-      b('plus', 'Acercar', () => this.setZoom(this.zoom * 1.2)),
+      b('plus', 'Acercar', () => this.setZoom(this.zoom * 1.2), 'zoomctl'),
       this.$undo, this.$redo,
       b('more', 'Más opciones', (e) => this.moreMenu(e.currentTarget)));
 
@@ -149,7 +153,8 @@ export class Viewer {
     this.$sheet = el('div', { class: 'sheet ' + doc.type });
     this.$stage = el('div', { class: 'stage' }, this.$sheet);
     this.$scroll = el('div', { class: 'scroller' }, this.$stage);
-    root.append(bar, this.$find, this.$tools, this.$scroll);
+    this.reader = new Reader(this);
+    root.append(bar, this.$find, this.reader.$bar, this.$tools, this.$scroll);
 
     this.io = new IntersectionObserver((ents) => {
       for (const e of ents) {
@@ -323,6 +328,7 @@ export class Viewer {
     p.ink = el('canvas', { class: 'ink' });
     p.el.append(p.ink);
     this.drawHits(p);
+    this.drawTts(p);
     this.render(p);
   }
 
@@ -604,16 +610,24 @@ export class Viewer {
     const tc = await page.getTextContent();
     let str = '';
     const segs = [];
+    let eol = false, prev = null;
     for (const it of tc.items) {
       if (it.str) {
         const tx = pdfjs.Util.transform(vp.transform, it.transform);
         const fh = Math.hypot(tx[2], tx[3]) || it.height || 10;
+        if (eol && prev) {
+          // salto de línea: si cambia el tamaño de letra o hay mucho espacio, es otro bloque (título, párrafo)
+          const gap = tx[5] - prev.y;
+          str += Math.abs(fh - prev.h) > prev.h * 0.2 || gap > prev.h * 1.9 ? '\n' : ' ';
+        }
+        eol = false;
         segs.push({ s: str.length, n: it.str.length, x: tx[4] / vp.width, y: (tx[5] - fh * 0.85) / vp.width, w: it.width / vp.width, h: (fh * 1.1) / vp.width });
         str += it.str;
+        prev = { y: tx[5], h: fh };
       }
-      if (it.hasEOL) str += ' ';
+      if (it.hasEOL) eol = true;
     }
-    c = { ...fold(str), segs };
+    c = { ...fold(str), str, segs };
     this.textCache.set(i, c);
     return c;
   }
@@ -735,6 +749,45 @@ export class Viewer {
     }
   }
 
+  // ---------- lectura en voz alta ----------
+  toggleTts() {
+    if (this.reader.$bar.hidden) this.reader.open();
+    else this.reader.close();
+  }
+
+  setTtsMark(u, follow) {
+    this.ttsMark = u;
+    for (const p of this.pages) if (p.mounted) this.drawTts(p);
+    if (!u || !follow || !this.$scroll) return;
+    const p = this.pages.find((x) => x.key === u.key && u.y >= x.offY - 1e-6 && u.y < x.offY + x.aspect) ||
+      this.pages.find((x) => x.key === u.key);
+    if (!p) return;
+    const last = u.rects[u.rects.length - 1] || { y: u.y, h: 0 };
+    const top = p.el.offsetTop + (u.y - p.offY) * this.pw;
+    const bottom = p.el.offsetTop + (last.y + last.h - p.offY) * this.pw;
+    const s = this.$scroll;
+    if (top < s.scrollTop + 40 || bottom > s.scrollTop + s.clientHeight - 40) {
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      s.scrollTo({ top: Math.max(0, top - s.clientHeight * 0.3), behavior: reduce ? 'auto' : 'smooth' });
+    }
+  }
+
+  drawTts(p) {
+    for (const h of p.el.querySelectorAll('.ttsmark')) h.remove();
+    const u = this.ttsMark;
+    if (!u || u.key !== p.key || !p.ink) return;
+    const y0 = p.offY, y1 = p.offY + p.aspect;
+    for (const r of u.rects) {
+      if (r.y + r.h < y0 || r.y > y1) continue;
+      const h = el('div', { class: 'ttsmark' });
+      h.style.left = r.x * 100 + '%';
+      h.style.width = r.w * 100 + '%';
+      h.style.top = `calc(var(--pw) * ${r.y - p.offY})`;
+      h.style.height = `calc(var(--pw) * ${r.h})`;
+      p.el.insertBefore(h, p.ink);
+    }
+  }
+
   // ---------- deshacer / rehacer ----------
   apply(op) {
     for (const e of op.del) {
@@ -811,6 +864,10 @@ export class Viewer {
           this.finger = !this.finger; this.penSeen = true; this.savePrefs();
           toast(this.finger ? 'El dedo dibuja. Usa dos dedos para mover y hacer zoom.' : 'El dedo desplaza; el lápiz o el ratón dibujan.');
         },
+      },
+      this.opts.onTags && {
+        icon: 'tag', label: 'Etiquetas…' + (doc.tags?.length ? ` (${doc.tags.join(', ')})` : ''),
+        onClick: () => this.opts.onTags(doc),
       },
       doc.type === 'canvas' && {
         icon: 'page', label: 'Tipo de papel…',
@@ -911,6 +968,7 @@ export class Viewer {
   }
 
   async close() {
+    this.reader?.close();
     this.commitText();
     this.cancelStroke();
     this.savePos();

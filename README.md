@@ -9,6 +9,9 @@ sin servidor propio y sin paso de compilación.
 ## Qué hace
 
 - **Biblioteca**: PDF, imágenes, páginas web guardadas y lienzos en blanco. Búsqueda, filtros por tipo y carpetas.
+- **Lectura en voz alta**: lee PDF, páginas web y notas desde donde estás mirando, resalta la frase,
+  pasa de página sola y elige la voz según el idioma (español, portugués, inglés). Usa las voces del sistema.
+- **Etiquetas**: varias por documento, con filtro en la biblioteca; se sincronizan con los demás dispositivos.
 - **Búsqueda**: el buscador de la biblioteca encuentra palabras dentro de los PDF y páginas web (sin
   distinguir acentos ni mayúsculas) y abre el documento en la primera coincidencia. Dentro del visor,
   la lupa o Ctrl+F resalta y recorre los resultados. Los PDF escaneados (solo imagen) no tienen texto que buscar.
@@ -167,6 +170,7 @@ js/web.js                   captura de páginas web
 js/p2p.js                   sincronización directa entre dispositivos emparejados
 js/backup.js                archivo de copia y fusión de documentos recibidos
 js/search.js                índice de texto para la búsqueda
+js/tts.js                   lectura en voz alta
 sw.js                       funcionamiento sin conexión
 vendor/pdfjs/               PDF.js 4.10 (Mozilla, licencia Apache 2.0)
 desktop/                    app de escritorio (Electron) para Windows y Linux
