@@ -75,7 +75,29 @@ El APK se firma con la clave `android/app/paperbook.keystore`, incluida en el re
 las versiones nuevas se instalen encima de las anteriores. Vale para uso personal; para publicar en
 una tienda, sustitúyela por una clave privada.
 
-## Sincronizar sin configurar nada (archivo de copia)
+## Emparejar dispositivos con un código
+
+La forma más sencilla de sincronizar, sin cuentas ni configuración:
+
+1. En un dispositivo: **Sincronizar → Mostrar un código**.
+2. En el otro: **Sincronizar → Tengo un código**, escribe las 6 cifras y pulsa **Conectar**.
+3. De vuelta en el primero, pulsa **Aceptar**.
+
+Desde entonces se sincronizan solos (documentos, anotaciones, cambios de nombre y borrados) cada vez
+que los dos tienen Paperbook abierto a la vez. El emparejamiento se recuerda; se pueden añadir más
+dispositivos con «Añadir otro dispositivo».
+
+Cómo funciona y límites:
+
+- Los datos viajan cifrados directamente de un dispositivo al otro (WebRTC). Un servidor público
+  gratuito de PeerJS (`0.peerjs.com`) solo ayuda a que se encuentren; no recibe los documentos.
+- **No hay copia en la nube**: si un dispositivo se pierde, queda lo que haya en los otros.
+- Solo sincroniza con los dos abiertos a la vez. En algunas redes restrictivas (hospital,
+  universidad) la conexión directa puede no establecerse.
+- El código sirve una sola vez y solo mientras está en pantalla, y el primer dispositivo debe
+  aceptar la conexión.
+
+## Pasar todo con un archivo de copia
 
 Botón **Sincronizar** → **Guardar copia**. Se genera un archivo `.paperbook` con tus documentos y
 anotaciones; súbelo a tu Drive (o pásalo como quieras) y en el otro dispositivo pulsa
@@ -140,6 +162,8 @@ js/ink.js                   motor de tinta (dibujo y borrado de trazos)
 js/store.js                 almacenamiento local y fusión de anotaciones
 js/drive.js                 sincronización con Google Drive
 js/web.js                   captura de páginas web
+js/p2p.js                   sincronización directa entre dispositivos emparejados
+js/backup.js                archivo de copia y fusión de documentos recibidos
 js/search.js                índice de texto para la búsqueda
 sw.js                       funcionamiento sin conexión
 vendor/pdfjs/               PDF.js 4.10 (Mozilla, licencia Apache 2.0)

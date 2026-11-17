@@ -283,7 +283,7 @@ export const drive = {
     // 2) documento eliminado
     if (L.deleted) {
       if (R.content) await this.remove(R.content.id);
-      if (!R.meta && !L.drive?.metaId) return store.purgeDoc(id);
+      if (!R.meta && !L.drive?.metaId) return localStorage.getItem('pb.p2p') ? undefined : store.purgeDoc(id);
       await store.delBlob(id);
       await store.delAnn(id);
       await store.delText(id);

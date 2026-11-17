@@ -3,6 +3,7 @@ import { store, newId, foldText } from './store.js';
 import { Viewer, makeThumb } from './viewer.js';
 import { drive } from './drive.js';
 import { indexSoon, indexPending, searchContent } from './search.js';
+import { p2p } from './p2p.js';
 import { exportBackup, importBackup, deliver } from './backup.js';
 import { capture, fromHtmlFile, getProxy, setProxy, DEFAULT_PROXY } from './web.js';
 import { icon, el, toast, menu, dialog, askText, askConfirm } from './ui.js';
@@ -175,7 +176,7 @@ function cardMenu(anchor, d) {
       icon: 'trash', danger: true, label: 'Eliminar', onClick: async () => {
         const where = drive.connected ? ' Se eliminará también de Google Drive y de tus otros dispositivos.' : '';
         if (!(await askConfirm('Eliminar documento', `«${d.title}» y sus anotaciones se eliminarán.${where}`))) return;
-        if (!d.drive?.metaId && !d.drive?.contentId) return store.purgeDoc(d.id).then(renderLib);
+        if (!d.drive?.metaId && !d.drive?.contentId && !p2p.paired) return store.purgeDoc(d.id).then(renderLib);
         d.deleted = true;
         d.updatedAt = Date.now();
         d.thumb = null;
@@ -278,11 +279,11 @@ function webDialog(prefill = '') {
 // ---------- Google Drive ----------
 function renderDrive() {
   const s = drive.state;
-  const text = {
+  const text = s === 'off' && p2p.paired ? (p2p.online ? 'Conectado' : 'Emparejado') : {
     off: 'Sincronizar', idle: 'Sincronizado', syncing: 'Sincronizando…', error: 'Error de Drive', auth: 'Reconectar Drive',
   }[s];
   $drive.innerHTML = icon('cloud') + `<span>${text}</span>`;
-  $drive.dataset.state = s;
+  $drive.dataset.state = s === 'off' && p2p.online ? 'idle' : s;
   $drive.title = drive.message || (drive.lastSync ? 'Última sincronización: ' + new Date(drive.lastSync).toLocaleString('es') : 'Google Drive');
 }
 
@@ -337,8 +338,90 @@ function driveDialog() {
     const closeRow = dlg.lastElementChild;
     adv.append(...[...dlg.children].slice(1, -1));
     dlg.insertBefore(adv, closeRow);
-    dlg.insertBefore(backupSection(), adv);
+    const files = el('details', { class: 'adv' }, el('summary', {}, 'Pasar todo con un archivo de copia'), backupSection());
+    dlg.insertBefore(files, adv);
+    dlg.insertBefore(pairSection(dlg), files);
   });
+}
+
+let pairRender = null;
+
+/** Emparejar dispositivos con un código: sincronización directa, sin cuentas. */
+function pairSection(dlg) {
+  const box = el('section', { class: 'pair' });
+  let mode = 'idle', code = '', ask = null, error = '';
+  const cancel = () => { p2p.cancelPairing(); mode = 'idle'; ask = null; render(); };
+  const render = () => {
+    const kids = [];
+    if (mode === 'host') {
+      kids.push(
+        el('p', {}, 'En el otro dispositivo abre Paperbook, pulsa Sincronizar → «Tengo un código» y escribe:'),
+        el('div', { class: 'code', 'aria-label': 'Código de emparejamiento' }, code ? code.slice(0, 3) + ' ' + code.slice(3) : '··· ···'),
+        ask
+          ? el('p', {}, el('strong', {}, 'Un dispositivo quiere conectarse. ¿Lo aceptas?'))
+          : el('p', { class: 'hint' }, code ? 'Esperando al otro dispositivo… Mantén esta ventana abierta.' : 'Generando código…'),
+        ask
+          ? el('div', { class: 'row' },
+            el('button', { class: 'btn primary', onclick: () => { ask(true); ask = null; render(); } }, 'Aceptar'),
+            el('button', { class: 'btn', onclick: () => { ask(false); ask = null; render(); } }, 'Rechazar'))
+          : el('div', { class: 'row' }, el('button', { class: 'btn', onclick: cancel }, 'Cancelar')));
+    } else if (mode === 'join') {
+      const input = el('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 7, placeholder: '000 000', class: 'codein', 'aria-label': 'Código de 6 cifras' });
+      const go = el('button', { type: 'submit', class: 'btn primary' }, 'Conectar');
+      kids.push(el('form', {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          go.disabled = true;
+          go.textContent = 'Conectando…';
+          try {
+            await p2p.join(input.value);
+            mode = 'idle'; error = '';
+            toast('Dispositivos emparejados.');
+          } catch (err) { error = err.message; }
+          render();
+        },
+      }, el('p', {}, 'Escribe el código de 6 cifras que muestra el otro dispositivo.'),
+        el('div', { class: 'row' }, input, go, el('button', { type: 'button', class: 'btn', onclick: () => { error = ''; cancel(); } }, 'Cancelar'))));
+      setTimeout(() => input.focus(), 30);
+    } else if (p2p.paired) {
+      const n = p2p.group.peers.length;
+      kids.push(
+        el('p', { class: 'pstate' + (p2p.online ? ' on' : '') }, p2p.online
+          ? 'Conectado. Los cambios se envían solos entre tus dispositivos.'
+          : `Emparejado con ${n} ${n === 1 ? 'dispositivo' : 'dispositivos'}. Se sincroniza cuando los dos tienen Paperbook abierto.`),
+        p2p.message ? el('p', { class: 'hint' }, p2p.message) : null,
+        el('div', { class: 'row' },
+          el('button', { class: 'btn', onclick: () => startHost() }, 'Añadir otro dispositivo'),
+          el('button', { class: 'btn', onclick: () => { p2p.unpair(); toast('Dispositivos desemparejados. Tus documentos siguen aquí.'); render(); } }, 'Desemparejar')));
+    } else {
+      kids.push(
+        el('p', {}, 'Empareja tu tablet y tu computadora con un código. Sin cuentas ni configuración: se sincronizan solos cuando los dos tienen Paperbook abierto.'),
+        el('div', { class: 'row' },
+          el('button', { class: 'btn primary', onclick: () => startHost() }, 'Mostrar un código'),
+          el('button', { class: 'btn', onclick: () => { mode = 'join'; error = ''; render(); } }, 'Tengo un código')));
+    }
+    if (error) kids.push(el('p', { class: 'hint error' }, error));
+    box.replaceChildren(...kids.filter(Boolean));
+  };
+  const startHost = async () => {
+    mode = 'host'; code = ''; error = ''; ask = null;
+    render();
+    try {
+      await p2p.host({
+        onCode: (c) => { code = c; render(); },
+        confirm: () => new Promise((res) => { ask = res; render(); }),
+      });
+      toast('Dispositivos emparejados.');
+    } catch (err) {
+      if (err.message !== 'cancelado') error = err.message;
+    }
+    mode = 'idle';
+    render();
+  };
+  pairRender = render;
+  dlg.addEventListener('close', () => { pairRender = null; if (mode !== 'idle') p2p.cancelPairing(); });
+  render();
+  return box;
 }
 
 function backupSection() {
@@ -376,7 +459,7 @@ function backupSection() {
     }
   };
   return el('section', { class: 'backup' },
-    el('p', {}, 'Pasa tus documentos y anotaciones de un dispositivo a otro con un archivo. No hay que configurar nada.'),
+    el('p', {}, 'Útil si los dispositivos no pueden estar abiertos a la vez, o como copia de seguridad.'),
     el('div', { class: 'row' },
       el('button', { class: 'btn primary', html: icon('upload') + '<span>Guardar copia</span>', onclick: (e) => menu(e.currentTarget, [
         { icon: 'file', label: 'Copia completa (documentos y anotaciones)', onClick: () => save(true) },
@@ -454,6 +537,8 @@ async function main() {
     if (type !== 'ann' && !viewer) { clearTimeout(rt); rt = setTimeout(renderLib, 60); }
   });
   drive.onState = renderDrive;
+  p2p.onState = () => { renderDrive(); pairRender?.(); };
+  p2p.start().catch((e) => console.warn(e));
   drive.init();
   addEventListener('hashchange', route);
   await route();

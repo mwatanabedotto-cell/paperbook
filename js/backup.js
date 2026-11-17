@@ -46,6 +46,69 @@ export async function deliver(file) {
   return 'downloaded';
 }
 
+const norm = (v) => (v == null ? '' : v);
+
+/** Firma del estado sincronizable de un documento: si coincide en dos dispositivos, están al día. */
+export function docSig(d, ann) {
+  let n = 0, last = '';
+  for (const arr of Object.values(ann?.strokes || {})) {
+    n += arr.length;
+    for (const s of arr) if (s.id > last) last = s.id;
+  }
+  return [norm(d.updatedAt), norm(d.title), norm(d.folder), norm(d.paper), d.pages || 0, n, last,
+    Object.keys(ann?.removed || {}).length].join('|');
+}
+
+export function metaOf(d) {
+  const doc = {};
+  for (const k of FIELDS) if (d[k] != null) doc[k] = d[k];
+  return doc;
+}
+
+/**
+ * Fusiona un documento recibido (de una copia o de otro dispositivo) con el local.
+ * Devuelve 'added' | 'merged' | 'same' | 'missing' | 'skipped'.
+ */
+export async function mergeIncoming(meta, ann, blob) {
+  const id = meta?.id;
+  if (!id) return 'skipped';
+  const L = store.docs.get(id);
+  if (L?.deleted) return 'skipped'; // eliminado aquí: no se resucita
+
+  if (L) {
+    const mine = await store.getAnn(id);
+    const before = docSig(L, mine);
+    const key = (d) => JSON.stringify([norm(d.title), norm(d.folder), norm(d.paper)]);
+    const ru = meta.updatedAt || 0, lu = L.updatedAt || 0;
+    if (ru > lu || (ru === lu && key(meta) > key(L))) {
+      for (const k of ['title', 'folder', 'paper', 'updatedAt']) L[k] = meta[k];
+    }
+    L.pages = Math.max(L.pages || 0, meta.pages || 0) || undefined;
+    const merged = mergeAnn(mine, ann);
+    const gotBlob = !!(L.noBlob && blob);
+    if (!gotBlob && docSig(L, merged) === before) return 'same';
+    await store.putAnn(id, merged, { replaced: true });
+    if (gotBlob) {
+      await store.putBlob(id, blob);
+      L.noBlob = false;
+      L.thumb = await makeThumb(L.type, blob);
+    }
+    await store.saveDoc(L);
+    indexSoon(L);
+    return 'merged';
+  }
+  if (meta.type !== 'canvas' && !blob) return 'missing';
+  const d = { ...meta };
+  if (blob) {
+    await store.putBlob(id, blob);
+    d.thumb = await makeThumb(d.type, blob);
+  }
+  await store.putAnn(id, ann || emptyAnn());
+  await store.saveDoc(d);
+  indexSoon(d);
+  return 'added';
+}
+
 /** Carga una copia y la fusiona. Devuelve { added, merged, missing }. */
 export async function importBackup(file) {
   const head = await file.slice(0, 16).text();
@@ -54,45 +117,13 @@ export async function importBackup(file) {
   let data;
   try { data = JSON.parse(await file.slice(16, 16 + n).text()); } catch { throw new Error('La copia está dañada o incompleta.'); }
   let off = 16 + n;
-  const out = { added: 0, merged: 0, missing: 0 };
-
+  const out = { added: 0, merged: 0, missing: 0, same: 0, skipped: 0 };
   for (const e of data.entries || []) {
     const slice = e.size ? file.slice(off, off + e.size) : null;
     off += e.size || 0;
-    const id = e.doc?.id;
-    if (!id) continue;
-    const content = async () => new Blob([await slice.arrayBuffer()], { type: e.doc.mime || '' });
-    const L = store.docs.get(id);
-
-    if (L?.deleted) continue; // eliminado aquí: no se resucita
-    if (L) {
-      if ((e.doc.updatedAt || 0) > (L.updatedAt || 0)) {
-        for (const k of ['title', 'folder', 'paper', 'updatedAt']) L[k] = e.doc[k];
-      }
-      L.pages = Math.max(L.pages || 0, e.doc.pages || 0) || undefined;
-      await store.putAnn(id, mergeAnn(await store.getAnn(id), e.ann), { replaced: true });
-      if (L.noBlob && slice) {
-        const blob = await content();
-        await store.putBlob(id, blob);
-        L.noBlob = false;
-        L.thumb = await makeThumb(L.type, blob);
-      }
-      await store.saveDoc(L);
-      indexSoon(L);
-      out.merged++;
-      continue;
-    }
-    if (e.doc.type !== 'canvas' && !slice) { out.missing++; continue; }
-    const d = { ...e.doc };
-    if (slice) {
-      const blob = await content();
-      await store.putBlob(id, blob);
-      d.thumb = await makeThumb(d.type, blob);
-    }
-    await store.putAnn(id, e.ann || emptyAnn());
-    await store.saveDoc(d);
-    indexSoon(d);
-    out.added++;
+    const blob = slice ? new Blob([await slice.arrayBuffer()], { type: e.doc?.mime || '' }) : null;
+    out[await mergeIncoming(e.doc, e.ann, blob)]++;
   }
+  out.merged += out.same;
   return out;
 }
