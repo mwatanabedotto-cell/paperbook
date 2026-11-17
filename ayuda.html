@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cómo usar Paperbook</title>
+<meta name="description" content="Guía para instalar Paperbook, anotar documentos y sincronizar tus dispositivos.">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+/* Layout: one reading column with a jump list; each task is a short numbered sequence. */
+:root {
+  --bg: #f4f1ea; --surface: #fffdf8; --ink: #22201c; --muted: #6a6459; --line: #ddd6c8;
+  --accent: #1f5f8b; --accent-ink: #ffffff; --mark: #ffd400; --warn-bg: #fbf0d0; --warn-ink: #5c4300;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #191816; --surface: #24221f; --ink: #ece7dc; --muted: #a59e90; --line: #3b3833;
+    --accent: #86bfe3; --accent-ink: #0e1d27; --mark: #6b5a00; --warn-bg: #3a3013; --warn-ink: #f1dc9a;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body);
+  padding-block: calc(32px + env(safe-area-inset-top, 0px)) calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 36px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+header { display: grid; gap: 12px; }
+.top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.brand { font: 600 17px/1 var(--display); color: var(--muted); text-decoration: none; }
+.top nav { display: flex; gap: 14px; font-size: 14.5px; }
+h1 { margin: 0; font: 600 clamp(32px, 7vw, 44px)/1.1 var(--display); letter-spacing: -0.015em; text-wrap: balance; }
+h1 mark { background: linear-gradient(transparent 58%, var(--mark) 58%, var(--mark) 92%, transparent 92%); color: inherit; padding: 0 0.06em; }
+.lead { margin: 0; max-width: 60ch; color: var(--muted); font-size: 17px; }
+
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.toc a {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--line);
+  border-radius: 99px; background: var(--surface); color: var(--ink); text-decoration: none; font-size: 14.5px;
+}
+.toc a:hover { border-color: var(--accent); }
+
+section { display: grid; gap: 14px; scroll-margin-top: 16px; }
+h2 { margin: 0; padding-top: 22px; border-top: 1px solid var(--line); font: 600 27px/1.2 var(--display); text-wrap: balance; }
+h3 { margin: 6px 0 0; font-size: 17px; }
+p { margin: 0; max-width: 64ch; }
+ol, ul { margin: 0; padding-left: 1.35em; display: grid; gap: 6px; max-width: 64ch; }
+li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+b { font-weight: 600; }
+kbd, code {
+  font: 0.88em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 5px;
+  padding: 1px 6px; overflow-wrap: anywhere;
+}
+.note { padding: 12px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 15px; max-width: 64ch; }
+.note a { color: inherit; }
+
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { display: grid; gap: 6px; align-content: start; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.card h3 { margin: 0; }
+.card p { font-size: 15px; color: var(--muted); }
+.card .pick { font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+
+details { border-bottom: 1px solid var(--line); padding: 10px 0; max-width: 64ch; }
+details:first-of-type { border-top: 1px solid var(--line); }
+summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+details > :not(summary) { margin-top: 8px; }
+
+footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <a class="brand" href="./">Paperbook</a>
+      <nav><a href="./">Abrir la app</a><a href="descargar.html">Descargar</a></nav>
+    </div>
+    <h1>Cómo usar <mark>Paperbook</mark></h1>
+    <p class="lead">Guarda tus PDF y páginas web, escribe encima con el lápiz o el dedo y lleva tus apuntes entre la tablet y la computadora.</p>
+    <ul class="toc">
+      <li><a href="#instalar">Instalar</a></li>
+      <li><a href="#documentos">Añadir documentos</a></li>
+      <li><a href="#anotar">Anotar</a></li>
+      <li><a href="#buscar">Buscar y organizar</a></li>
+      <li><a href="#sincronizar">Sincronizar</a></li>
+      <li><a href="#datos">Tus datos</a></li>
+      <li><a href="#problemas">Problemas frecuentes</a></li>
+    </ul>
+  </header>
+
+  <section id="instalar">
+    <h2>1. Instalar</h2>
+    <p>Puedes usarla directamente en el navegador desde <a href="./">la página de la app</a> («Usar ahora en el navegador»), o instalarla para que tenga su propio icono y funcione sin conexión.</p>
+
+    <h3>Tablet o teléfono Android</h3>
+    <ol>
+      <li>Abre <a href="./">la app</a> en <b>Chrome</b>.</li>
+      <li>Toca el menú <kbd>⋮</kbd> y elige <b>Instalar aplicación</b> (o «Añadir a pantalla de inicio»).</li>
+    </ol>
+    <p>También puedes descargar el archivo APK desde la <a href="descargar.html">página de descarga</a>. Android pedirá permiso para «instalar apps desconocidas». Con el APK puede verse una barra fina con la dirección arriba; si te molesta, instala desde Chrome como en los pasos anteriores.</p>
+
+    <h3>iPad o iPhone</h3>
+    <ol>
+      <li>Abre <a href="./">la app</a> en <b>Safari</b>.</li>
+      <li>Toca <b>Compartir</b> (el cuadrado con la flecha hacia arriba) y elige <b>Añadir a pantalla de inicio</b>.</li>
+    </ol>
+
+    <h3>Windows</h3>
+    <ol>
+      <li>Descarga el instalador desde la <a href="descargar.html">página de descarga</a> y ábrelo.</li>
+      <li>Si aparece el aviso azul de Windows, pulsa <b>Más información</b> y luego <b>Ejecutar de todas formas</b>. Sale porque el instalador no está firmado.</li>
+    </ol>
+
+    <h3>Linux</h3>
+    <ol>
+      <li>Descarga el AppImage desde la <a href="descargar.html">página de descarga</a>.</li>
+      <li>Dale permiso de ejecución (clic derecho → Propiedades → Permisos, o <code>chmod +x</code>) y ábrelo con doble clic. En Debian o Ubuntu también puedes usar el paquete <code>.deb</code>.</li>
+    </ol>
+
+    <h3>Mac</h3>
+    <p>Abre <a href="./">la app</a> en Safari y elige <b>Archivo → Añadir al Dock</b>, o en Chrome: menú <kbd>⋮</kbd> → <b>Instalar Paperbook</b>.</p>
+  </section>
+
+  <section id="documentos">
+    <h2>2. Añadir documentos</h2>
+    <p>Pulsa <b>Añadir</b> (arriba a la derecha) y elige:</p>
+    <ul>
+      <li><b>Subir archivos</b>: PDF, imágenes (fotos de la pizarra, esquemas) o páginas guardadas como <code>.html</code>. En la computadora también puedes arrastrarlos a la ventana.</li>
+      <li><b>Guardar página web</b>: pega la dirección de un artículo o una guía y se guarda una copia para leerla y anotarla sin conexión.</li>
+      <li><b>Nuevo lienzo</b>: un cuaderno en blanco. En el menú <kbd>⋯</kbd> del lienzo puedes elegir papel liso, rayado, cuadriculado o de puntos.</li>
+    </ul>
+    <p class="note">Algunas páginas no se pueden guardar: las que piden iniciar sesión (plataformas de cursos, revistas con suscripción) o las que se construyen con programas dentro de la página. Para esas, en el navegador usa <b>Imprimir → Guardar como PDF</b> y sube el PDF.</p>
+  </section>
+
+  <section id="anotar">
+    <h2>3. Anotar</h2>
+    <p>Toca un documento para abrirlo. La barra de herramientas está debajo del título:</p>
+    <div class="table">
+      <table>
+        <thead><tr><th>Herramienta</th><th>Para qué sirve</th></tr></thead>
+        <tbody>
+          <tr><td>Mano</td><td>Desplazarte sin dibujar.</td></tr>
+          <tr><td>Bolígrafo</td><td>Escribir a mano. Con lápiz, el trazo es más grueso cuanto más aprietas.</td></tr>
+          <tr><td>Resaltador</td><td>Marcar texto con color transparente.</td></tr>
+          <tr><td>Borrador</td><td>Pasa por encima de un trazo para borrarlo entero.</td></tr>
+          <tr><td>Línea, flecha</td><td>Subrayar o señalar. Arrastra desde el inicio hasta el final.</td></tr>
+          <tr><td>Rectángulo, elipse</td><td>Encerrar una zona.</td></tr>
+          <tr><td>Texto</td><td>Toca donde quieras escribir una nota con el teclado. Estas notas se pueden buscar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Los círculos de color cambian el color; el último (arcoíris) abre un color a elección. La barra deslizante cambia el grosor.</li>
+      <li><b>Deshacer y rehacer</b>: flechas curvas de arriba, o <kbd>Ctrl</kbd>+<kbd>Z</kbd> y <kbd>Ctrl</kbd>+<kbd>Y</kbd> en la computadora.</li>
+      <li><b>Zoom</b>: botones <kbd>−</kbd> y <kbd>+</kbd>, pellizcar con dos dedos, o <kbd>Ctrl</kbd> + rueda del ratón. Toca el porcentaje para volver al ancho de la pantalla.</li>
+      <li><b>Ir a una página</b>: toca el número de página de arriba.</li>
+      <li>Todo se guarda solo. Al volver a abrir el documento, sigue en la página donde lo dejaste.</li>
+    </ul>
+    <h3>Lápiz o dedo</h3>
+    <p>Al principio el dedo dibuja, y con dos dedos te mueves y haces zoom. En cuanto usas un lápiz (S Pen, Apple Pencil u otro), Paperbook lo detecta: el lápiz dibuja y el dedo pasa a desplazar, así no manchas la página con la mano. Puedes cambiarlo en el menú <kbd>⋯</kbd> → <b>Dibujar con el dedo</b>.</p>
+    <h3>Llevarte una página</h3>
+    <p>Menú <kbd>⋯</kbd> → <b>Exportar esta página como imagen</b> guarda la página con tus anotaciones como PNG, para enviarla o imprimirla.</p>
+  </section>
+
+  <section id="buscar">
+    <h2>4. Buscar y organizar</h2>
+    <ul>
+      <li><b>En toda la biblioteca</b>: escribe en el buscador de arriba. Encuentra palabras en los títulos y <b>dentro</b> de los PDF y páginas web, sin importar acentos ni mayúsculas («laparoscopica» encuentra «laparoscópica»). Toca un resultado para abrirlo justo en esa parte.</li>
+      <li><b>Dentro de un documento</b>: toca la lupa (o <kbd>Ctrl</kbd>+<kbd>F</kbd>). Las flechas te llevan de un resultado al siguiente.</li>
+      <li><b>Carpetas</b>: en cada documento, menú <kbd>⋮</kbd> → <b>Mover a carpeta…</b> y escribe un nombre (por ejemplo «Cirugía»). Luego filtra con el selector de carpetas.</li>
+      <li><b>Filtrar por tipo</b>: botones PDF, Web, Imagen o Lienzo.</li>
+    </ul>
+    <p class="note">Los PDF escaneados (una foto de cada hoja, sin texto seleccionable) no se pueden buscar, y tampoco lo que escribes a mano. Lo que escribes con la herramienta Texto sí.</p>
+  </section>
+
+  <section id="sincronizar">
+    <h2>5. Sincronizar tus dispositivos</h2>
+    <p>Pulsa <b>Sincronizar</b> en la biblioteca. Hay tres formas; la mayoría de las personas solo necesita la primera.</p>
+    <div class="cards">
+      <div class="card">
+        <span class="pick">Recomendada</span>
+        <h3>Emparejar con un código</h3>
+        <p>Sin cuentas. Se sincroniza solo cuando los dos dispositivos tienen Paperbook abierto.</p>
+      </div>
+      <div class="card">
+        <h3>Archivo de copia</h3>
+        <p>Manual. Sirve si no puedes tener los dos abiertos a la vez, y como respaldo.</p>
+      </div>
+      <div class="card">
+        <h3>Google Drive</h3>
+        <p>Automática, pero requiere una configuración técnica previa. Pensada para quien administra la app.</p>
+      </div>
+    </div>
+
+    <h3>Emparejar con un código</h3>
+    <ol>
+      <li>En el primer dispositivo: <b>Sincronizar → Mostrar un código</b>. Aparecen 6 cifras.</li>
+      <li>En el otro: <b>Sincronizar → Tengo un código</b>, escribe las cifras y pulsa <b>Conectar</b>.</li>
+      <li>En el primero, pulsa <b>Aceptar</b>.</li>
+    </ol>
+    <p>Listo: los documentos, las anotaciones, los cambios de nombre y los borrados pasan solos de uno a otro. El botón de arriba dice <b>Conectado</b> cuando están en contacto y <b>Emparejado</b> cuando el otro está cerrado; lo que hagas mientras tanto se envía cuando vuelvan a coincidir. Para sumar un tercer dispositivo usa <b>Añadir otro dispositivo</b>.</p>
+    <p class="note">Empareja solo tus propios dispositivos. Quien se empareje contigo verá y podrá cambiar todos tus documentos. Si alguien te pide un código, no lo aceptes. Para dejar de compartir: <b>Sincronizar → Desemparejar</b>.</p>
+
+    <h3>Archivo de copia</h3>
+    <ol>
+      <li><b>Sincronizar → Pasar todo con un archivo de copia → Guardar copia</b>. Elige <b>Copia completa</b> la primera vez; después basta con <b>Solo anotaciones</b>, que es un archivo pequeño.</li>
+      <li>Pasa el archivo al otro dispositivo: súbelo a tu Drive, envíatelo por correo o cópialo con un cable.</li>
+      <li>En el otro dispositivo: <b>Cargar copia</b> y elige el archivo. Se combina con lo que ya hay y no borra nada.</li>
+    </ol>
+  </section>
+
+  <section id="datos">
+    <h2>6. Dónde están tus datos</h2>
+    <ul>
+      <li>Tus documentos se guardan <b>en tu dispositivo</b>, no en un servidor. Nadie más los ve.</li>
+      <li>Cada persona tiene su propia biblioteca. Si varias personas usan la app, cada una ve solo lo suyo.</li>
+      <li>Al emparejar, los datos viajan cifrados directamente de un dispositivo al otro.</li>
+    </ul>
+    <p class="note"><b>Importante:</b> si usas la app en el navegador y borras los datos de navegación, o desinstalas la app, se borran tus documentos de ese dispositivo. Mantén otro dispositivo emparejado o guarda de vez en cuando una <b>copia completa</b>.</p>
+  </section>
+
+  <section id="problemas">
+    <h2>7. Problemas frecuentes</h2>
+    <details>
+      <summary>No aparece el código al pulsar «Mostrar un código»</summary>
+      <p>Hace falta conexión a internet para que los dispositivos se encuentren. Revisa la conexión y vuelve a intentarlo.</p>
+    </details>
+    <details>
+      <summary>Los dos dispositivos están emparejados pero no se conectan</summary>
+      <p>Comprueba que los dos tengan Paperbook abierto. Algunas redes (hospital, universidad, empresa) bloquean la conexión directa entre dispositivos: prueba con los datos móviles en uno de ellos, o usa el archivo de copia.</p>
+    </details>
+    <details>
+      <summary>«Paperbook ya está abierto en otra pestaña»</summary>
+      <p>Cierra las otras pestañas o ventanas de Paperbook en ese dispositivo y recarga.</p>
+    </details>
+    <details>
+      <summary>En Android aparece una barra con la dirección arriba</summary>
+      <p>Pasa con el APK. Desinstálalo e instala la app desde Chrome (menú <kbd>⋮</kbd> → Instalar aplicación): queda igual y a pantalla completa.</p>
+    </details>
+    <details>
+      <summary>Una página web no se guarda o se ve rota</summary>
+      <p>Guárdala desde el navegador con <b>Imprimir → Guardar como PDF</b> y sube el PDF. Las apps de Windows y Linux guardan más páginas que la versión de navegador.</p>
+    </details>
+    <details>
+      <summary>La búsqueda no encuentra nada en un PDF</summary>
+      <p>Si no puedes seleccionar el texto del PDF en otro programa, es un escaneo: es una imagen y no tiene texto que buscar.</p>
+    </details>
+    <details>
+      <summary>No veo el documento que agregué en la otra tablet</summary>
+      <p>Abre Paperbook en los dos dispositivos a la vez y espera a que el botón diga <b>Conectado</b>. Los archivos grandes tardan un poco; verás el progreso en el diálogo de Sincronizar.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p><a href="./">Abrir Paperbook</a> · <a href="descargar.html">Descargar la app</a></p>
+  </footer>
+</div>
+</body>
+</html>

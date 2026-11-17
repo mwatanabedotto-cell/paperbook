@@ -1,5 +1,7 @@
 # Paperbook
 
+Guía para quien usa la app: [`ayuda.html`](ayuda.html) — publicada en <https://mwatanabedotto-cell.github.io/paperbook/ayuda.html>.
+
 Visor de documentos para tablet y computadora: guarda PDF, páginas web e imágenes, escribe encima
 como en un lienzo y sincroniza todo con tu Google Drive. Es una aplicación web instalable (PWA),
 sin servidor propio y sin paso de compilación.

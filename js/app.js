@@ -79,8 +79,10 @@ function buildLib() {
       el('button', { class: 'btn primary', html: icon('plus') + '<span>Añadir</span>', onclick: (e) => addMenu(e.currentTarget) })),
     el('div', { class: 'filters' }, $chips, $folder),
     $grid, $file,
-    window.paperbookNative ? null : el('p', { class: 'foot' },
-      el('a', { href: 'descargar.html' }, 'Descargar la app para Android, Windows y Linux')));
+    el('p', { class: 'foot' },
+      el('a', { href: 'ayuda.html' }, 'Cómo se usa'),
+      window.paperbookNative ? null : ' · ',
+      window.paperbookNative ? null : el('a', { href: 'descargar.html' }, 'Descargar la app para Android, Windows y Linux')));
   for (const [id, label] of [['', 'Todos'], ...Object.entries(TYPES).map(([k, v]) => [k, v[0]])]) {
     $chips.append(el('button', { class: 'chip', 'data-t': id, onclick: () => { ui.type = id; renderLib(); } }, label));
   }
