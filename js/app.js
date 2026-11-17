@@ -367,7 +367,30 @@ async function route() {
   }
 }
 
+/** Portada: al entrar por el navegador solo se ofrece descargar o usar ahora. */
+function welcome() {
+  const $w = document.getElementById('welcome');
+  const sp = new URLSearchParams(location.search);
+  const skip = window.paperbookNative || standalone() || location.hash.startsWith('#/d/') ||
+    sp.has('url') || sp.has('text') || sp.has('new') || localStorage.getItem('pb.entered');
+  if (skip) return Promise.resolve();
+  const ua = navigator.userAgent;
+  const os = /Android/i.test(ua) ? 'Android' : /Windows/i.test(ua) ? 'Windows' : /Linux|X11/i.test(ua) && !isIOS() ? 'Linux' : '';
+  if (os) document.getElementById('w-download').textContent = 'Descargar para ' + os;
+  $lib.hidden = true;
+  $w.hidden = false;
+  return new Promise((res) => {
+    document.getElementById('w-use').addEventListener('click', () => {
+      localStorage.setItem('pb.entered', '1');
+      $w.hidden = true;
+      $lib.hidden = false;
+      res();
+    }, { once: true });
+  });
+}
+
 async function main() {
+  await welcome();
   buildLib();
   await store.init();
   let rt;

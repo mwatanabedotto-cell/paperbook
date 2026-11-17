@@ -1,8 +1,8 @@
 // Service worker: deja la app disponible sin conexión.
-const CACHE = 'paperbook-v4';
+const CACHE = 'paperbook-v5';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icon.svg',
-  'js/app.js', 'js/store.js', 'js/ink.js', 'js/ui.js', 'js/viewer.js', 'js/drive.js', 'js/web.js', 'js/search.js',
+  'js/app.js', 'js/store.js', 'js/ink.js', 'js/ui.js', 'js/viewer.js', 'js/drive.js', 'js/web.js', 'js/search.js', 'descargar.html',
   'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs',
 ];
 
@@ -23,8 +23,10 @@ self.addEventListener('fetch', (e) => {
   // Sirve de caché al instante y actualiza en segundo plano.
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const key = e.request.mode === 'navigate' ? './' : e.request;
-      const hit = await cache.match(key, { ignoreSearch: e.request.mode === 'navigate' });
+      // la app (raíz o index.html) comparte una entrada; el resto de páginas van por su URL
+      const isApp = e.request.mode === 'navigate' && /\/(index\.html)?$/.test(url.pathname);
+      const key = isApp ? './' : e.request;
+      const hit = await cache.match(key, { ignoreSearch: isApp });
       const net = fetch(e.request).then((r) => {
         if (r.ok) cache.put(key, r.clone());
         return r;
