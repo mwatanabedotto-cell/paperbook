@@ -1,5 +1,5 @@
 // Service worker: deja la app disponible sin conexión.
-const CACHE = 'paperbook-v3';
+const CACHE = 'paperbook-v4';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'icons/icon.svg',
   'js/app.js', 'js/store.js', 'js/ink.js', 'js/ui.js', 'js/viewer.js', 'js/drive.js', 'js/web.js', 'js/search.js',

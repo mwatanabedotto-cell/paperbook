@@ -271,3 +271,7 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+.foot { margin: 36px 0 0; text-align: center; font-size: 13.5px; }
+.foot a { color: var(--muted); }
+.foot a:hover { color: var(--accent); }

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<title>Descargar Paperbook</title>
+<style>
+/* Layout: one narrow column. A detected-system download band first, then one row per system, each with its own short install sequence. */
+:root {
+  --bg: #f4f1ea; --surface: #fffdf8; --ink: #22201c; --muted: #6a6459; --line: #ddd6c8;
+  --accent: #1f5f8b; --accent-ink: #ffffff; --mark: #ffd400; --warn-bg: #fbf0d0; --warn-ink: #5c4300;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #191816; --surface: #24221f; --ink: #ece7dc; --muted: #a59e90; --line: #3b3833;
+    --accent: #86bfe3; --accent-ink: #0e1d27; --mark: #6b5a00; --warn-bg: #3a3013; --warn-ink: #f1dc9a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #191816; --surface: #24221f; --ink: #ece7dc; --muted: #a59e90; --line: #3b3833;
+  --accent: #86bfe3; --accent-ink: #0e1d27; --mark: #6b5a00; --warn-bg: #3a3013; --warn-ink: #f1dc9a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body);
+  padding-block: 40px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 28px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+header { display: grid; gap: 10px; }
+.brand { font: 600 17px/1 var(--display); color: var(--muted); letter-spacing: 0.01em; }
+h1 { margin: 0; font: 600 clamp(32px, 7vw, 46px)/1.08 var(--display); letter-spacing: -0.015em; text-wrap: balance; }
+h1 mark { background: linear-gradient(transparent 58%, var(--mark) 58%, var(--mark) 92%, transparent 92%); color: inherit; padding: 0 0.08em; }
+.lead { margin: 0; max-width: 58ch; color: var(--muted); font-size: 17px; }
+
+.hero {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px;
+  padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+}
+.hero > div { flex: 1 1 220px; min-width: 0; }
+.hero strong { display: block; font-size: 17px; }
+.hero > div span { color: var(--muted); font-size: 14px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px;
+  border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--accent-ink);
+  font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.btn.ghost { background: none; color: var(--accent); border-color: var(--line); font-weight: 500; }
+.btn:hover { filter: brightness(1.08); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+
+.systems { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.sys { display: grid; gap: 12px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.sys.you h2::after {
+  content: "tu sistema"; margin-left: 10px; padding: 2px 8px; border-radius: 99px; vertical-align: middle;
+  background: var(--accent); color: var(--accent-ink); font: 600 11px/1.6 var(--body); letter-spacing: 0.06em; text-transform: uppercase;
+}
+h2 { margin: 0; font: 600 24px/1.2 var(--display); }
+.files { display: flex; flex-wrap: wrap; gap: 10px; }
+.file { display: grid; gap: 2px; }
+.file small { color: var(--muted); font: 12px/1.3 var(--mono); padding-left: 2px; overflow-wrap: anywhere; }
+ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; max-width: 62ch; }
+ol li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+code { font: 0.9em var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+.note { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); font-size: 14.5px; max-width: 62ch; }
+.note a { color: inherit; }
+footer { color: var(--muted); font-size: 14px; display: grid; gap: 6px; }
+footer p { margin: 0; max-width: 62ch; }
+@media (max-width: 480px) { .hero .btn, .file, .file .btn { width: 100%; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">Paperbook</div>
+    <h1>Tus documentos, <mark>anotados a mano</mark>, en todos tus dispositivos</h1>
+    <p class="lead">Guarda PDF y páginas web, escribe encima con lápiz o dedo, busca dentro del texto y sincroniza con Google Drive. Elige tu sistema para descargar la app.</p>
+  </header>
+
+  <section class="hero" aria-label="Descarga recomendada">
+    <div>
+      <strong id="pick-title">Descarga para tu sistema</strong>
+      <span id="pick-sub">Elige abajo entre Android, Windows y Linux.</span>
+    </div>
+    <a class="btn" id="pick-btn" href="https://github.com/mwatanabedotto-cell/paperbook/releases/tag/descargas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>
+      <span id="pick-label">Ver todas las descargas</span>
+    </a>
+  </section>
+
+  <div class="systems">
+    <section class="sys" id="android" data-os="android">
+      <h2>Android</h2>
+      <div class="files">
+        <div class="file">
+          <a class="btn" href="https://github.com/mwatanabedotto-cell/paperbook/releases/download/descargas/Paperbook-Android.apk">Descargar APK</a>
+          <small>Paperbook-Android.apk · 0,4 MB</small>
+        </div>
+      </div>
+      <ol>
+        <li>Descarga el archivo en la tablet o el teléfono y ábrelo.</li>
+        <li>Si Android lo pide, permite «instalar apps desconocidas» para tu navegador o gestor de archivos.</li>
+        <li>Abre Paperbook con conexión la primera vez. Después funciona sin conexión.</li>
+      </ol>
+      <p class="note">La app de Android abre la <a href="https://mwatanabedotto-cell.github.io/paperbook/">versión web publicada</a> a pantalla completa con Chrome. Si esa dirección aún no está activa, la app mostrará un error hasta que se publique.</p>
+    </section>
+
+    <section class="sys" id="windows" data-os="windows">
+      <h2>Windows</h2>
+      <div class="files">
+        <div class="file">
+          <a class="btn" href="https://github.com/mwatanabedotto-cell/paperbook/releases/download/descargas/Paperbook-Setup-Windows.exe">Descargar instalador</a>
+          <small>Paperbook-Setup-Windows.exe · 79 MB</small>
+        </div>
+        <div class="file">
+          <a class="btn ghost" href="https://github.com/mwatanabedotto-cell/paperbook/releases/download/descargas/Paperbook-Portable-Windows.exe">Versión portátil</a>
+          <small>Paperbook-Portable-Windows.exe · 79 MB</small>
+        </div>
+      </div>
+      <ol>
+        <li>Ejecuta el archivo descargado.</li>
+        <li>Como no está firmado, Windows mostrará un aviso azul de SmartScreen: pulsa «Más información» y luego «Ejecutar de todas formas».</li>
+        <li>El instalador crea el acceso directo. La versión portátil se abre sin instalar nada.</li>
+      </ol>
+    </section>
+
+    <section class="sys" id="linux" data-os="linux">
+      <h2>Linux</h2>
+      <div class="files">
+        <div class="file">
+          <a class="btn" href="https://github.com/mwatanabedotto-cell/paperbook/releases/download/descargas/Paperbook-linux-x86_64.AppImage">Descargar AppImage</a>
+          <small>Paperbook-linux-x86_64.AppImage · 105 MB</small>
+        </div>
+        <div class="file">
+          <a class="btn ghost" href="https://github.com/mwatanabedotto-cell/paperbook/releases/download/descargas/Paperbook-linux-amd64.deb">Paquete .deb</a>
+          <small>Paperbook-linux-amd64.deb · 73 MB</small>
+        </div>
+      </div>
+      <ol>
+        <li>AppImage: dale permiso de ejecución con <code>chmod +x Paperbook-linux-x86_64.AppImage</code> y ábrelo con doble clic.</li>
+        <li>Debian o Ubuntu: instala el paquete con <code>sudo apt install ./Paperbook-linux-amd64.deb</code>.</li>
+      </ol>
+    </section>
+
+    <section class="sys" id="otros">
+      <h2>iPad, iPhone y Mac</h2>
+      <ol>
+        <li>Abre la <a href="https://mwatanabedotto-cell.github.io/paperbook/">versión web</a> en Safari.</li>
+        <li>Toca Compartir y elige «Añadir a pantalla de inicio» (en Mac: Archivo → «Añadir al Dock»).</li>
+      </ol>
+    </section>
+  </div>
+
+  <footer>
+    <p>Las apps de Windows y Linux llevan todo dentro y funcionan sin conexión. Para sincronizar con Google Drive hay que configurar la conexión una vez; los pasos están en la <a href="https://github.com/mwatanabedotto-cell/paperbook#sincronizar-con-google-drive">guía del proyecto</a>.</p>
+    <p>Los instaladores se generan automáticamente con cada cambio. <a href="https://github.com/mwatanabedotto-cell/paperbook/releases/tag/descargas">Ver todos los archivos</a>.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var ua = navigator.userAgent || '';
+  var os = /Android/i.test(ua) ? 'android' : /Windows/i.test(ua) ? 'windows'
+    : /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua)) ? 'otros'
+    : /Linux|X11/i.test(ua) ? 'linux' : '';
+  var sec = os && document.getElementById(os);
+  if (!sec) return;
+  sec.classList.add('you');
+  sec.parentNode.insertBefore(sec, sec.parentNode.firstChild);
+  var main = sec.querySelector('.file .btn');
+  var names = { android: 'Android', windows: 'Windows', linux: 'Linux', otros: 'iPad, iPhone o Mac' };
+  document.getElementById('pick-title').textContent = 'Parece que usas ' + names[os];
+  var btn = document.getElementById('pick-btn');
+  if (main) {
+    btn.href = main.href;
+    document.getElementById('pick-label').textContent = main.textContent;
+    document.getElementById('pick-sub').textContent = sec.querySelector('.file small').textContent;
+  } else {
+    btn.href = 'https://mwatanabedotto-cell.github.io/paperbook/';
+    document.getElementById('pick-label').textContent = 'Abrir la versión web';
+    document.getElementById('pick-sub').textContent = 'En estos sistemas se instala desde Safari, sin descargar archivos.';
+  }
+})();
+</script>
+</body>
+</html>

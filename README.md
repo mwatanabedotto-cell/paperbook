@@ -39,6 +39,9 @@ Para probarla en local: `python3 -m http.server 8000` y abre `http://localhost:8
 
 ## Instaladores (Android, Windows, Linux)
 
+Página de descarga: [`descargar.html`](descargar.html) (publicada en
+<https://mwatanabedotto-cell.github.io/paperbook/descargar.html> cuando Pages esté activo).
+
 Cada cambio en el repositorio compila los instaladores y los publica en
 <https://github.com/mwatanabedotto-cell/paperbook/releases/tag/descargas>:
 
